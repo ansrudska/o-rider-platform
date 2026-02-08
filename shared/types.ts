@@ -167,3 +167,27 @@ export interface FollowRelation {
   profileImage: string | null;
   createdAt: number;
 }
+
+// User Profile
+export interface UserProfile {
+  nickname: string;
+  email: string | null;
+  photoURL: string | null;
+  stravaConnected: boolean;
+  stravaAthleteId: number | null;
+  stravaNickname: string | null;
+  createdAt?: number;
+}
+
+// Activity Streams (Strava GPS data)
+export interface ActivityStreams {
+  userId: string;
+  latlng?: [number, number][];
+  altitude?: number[];
+  heartrate?: number[];
+  watts?: number[];
+  cadence?: number[];
+  velocity_smooth?: number[];
+  time?: number[];
+  distance?: number[];
+}
