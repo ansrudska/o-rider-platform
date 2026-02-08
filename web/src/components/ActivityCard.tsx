@@ -1,0 +1,129 @@
+import { Link } from "react-router-dom";
+import type { Activity } from "@shared/types";
+import Avatar from "./Avatar";
+import MapPlaceholder from "./MapPlaceholder";
+
+interface ActivityCardProps {
+  activity: Activity;
+  showMap?: boolean;
+}
+
+function formatDuration(ms: number): string {
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function timeAgo(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return "방금 전";
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "어제";
+  if (days < 7) return `${days}일 전`;
+  return new Date(timestamp).toLocaleDateString("ko-KR");
+}
+
+export default function ActivityCard({
+  activity,
+  showMap = true,
+}: ActivityCardProps) {
+  const s = activity.summary;
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Header */}
+      <div className="p-4 pb-3">
+        <div className="flex items-center gap-3">
+          <Avatar
+            name={activity.nickname}
+            imageUrl={activity.profileImage}
+            size="md"
+            userId={activity.userId}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <Link
+                to={`/athlete/${activity.userId}`}
+                className="font-semibold text-sm hover:text-orange-600 transition-colors"
+              >
+                {activity.nickname}
+              </Link>
+              <span className="text-xs text-gray-400">
+                {timeAgo(activity.createdAt)}
+              </span>
+            </div>
+            <Link
+              to={`/activity/${activity.id}`}
+              className="text-base font-bold text-gray-900 hover:text-orange-600 transition-colors block mt-0.5"
+            >
+              {activity.description || "라이딩"}
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Map thumbnail */}
+      {showMap && (
+        <Link to={`/activity/${activity.id}`}>
+          <MapPlaceholder height="h-48" label="경로 보기" />
+        </Link>
+      )}
+
+      {/* Stats */}
+      <div className="px-4 py-3 grid grid-cols-4 gap-3 text-sm">
+        <div>
+          <div className="text-gray-500 text-xs">거리</div>
+          <div className="font-semibold">
+            {(s.distance / 1000).toFixed(1)} km
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-500 text-xs">시간</div>
+          <div className="font-semibold">
+            {formatDuration(s.ridingTimeMillis)}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-500 text-xs">획득고도</div>
+          <div className="font-semibold">{s.elevationGain} m</div>
+        </div>
+        <div>
+          <div className="text-gray-500 text-xs">평속</div>
+          <div className="font-semibold">{s.averageSpeed.toFixed(1)} km/h</div>
+        </div>
+      </div>
+
+      {/* Footer: kudos + comments */}
+      <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-4 text-sm text-gray-500">
+        <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+          </svg>
+          <span>{activity.kudosCount > 0 ? activity.kudosCount : "좋아요"}</span>
+        </button>
+        <Link
+          to={`/activity/${activity.id}`}
+          className="flex items-center gap-1 hover:text-orange-500 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span>
+            {activity.commentCount > 0 ? activity.commentCount : "댓글"}
+          </span>
+        </Link>
+        {activity.segmentEffortCount > 0 && (
+          <span className="flex items-center gap-1 text-xs">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            {activity.segmentEffortCount}개 세그먼트
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
