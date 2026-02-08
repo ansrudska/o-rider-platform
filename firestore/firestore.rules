@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check if user follows target
+    function isFollowing(userId, targetId) {
+      return exists(/databases/$(database)/documents/following/$(userId)/$(targetId));
+    }
+
+    // Activities: owner write, visibility-based read
+    match /activities/{activityId} {
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null
+                  && (resource.data.userId == request.auth.uid
+                      || resource.data.visibility == "everyone"
+                      || (resource.data.visibility == "friends"
+                          && isFollowing(request.auth.uid, resource.data.userId)));
+      allow update, delete: if request.auth != null
+                            && request.auth.uid == resource.data.userId;
+    }
+
+    // Activity Photos
+    match /activity_photos/{activityId}/{photoId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Feed: owner read only (written by Cloud Functions)
+    match /feed/{userId}/{activityId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Kudos
+    match /kudos/{activityId}/{userId} {
+      allow read: if request.auth != null;
+      allow create, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Comments
+    match /comments/{activityId}/{commentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null
+                    && request.auth.uid == resource.data.userId;
+    }
+
+    // Notifications: owner read/update only
+    match /notifications/{userId}/{notifId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Segments: public read, auth create, owner/admin update
+    match /segments/{segmentId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.creatorId;
+    }
+
+    // Segment Efforts: public read (leaderboard), owner create
+    match /segment_efforts/{segmentId}/{effortId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+    }
+
+    // User PRs: owner only
+    match /user_prs/{userId}/segments/{segmentId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Following
+    match /following/{userId}/{targetId} {
+      allow read: if request.auth != null;
+      allow create, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Followers (written by Cloud Functions)
+    match /followers/{targetId}/{userId} {
+      allow read: if request.auth != null;
+    }
+
+    // Group Rides (written by Cloud Functions)
+    match /group_rides/{groupRideId} {
+      allow read: if request.auth != null;
+    }
+  }
+}
