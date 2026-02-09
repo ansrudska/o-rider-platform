@@ -41,13 +41,6 @@
       ]
     },
     {
-      "collectionGroup": "segment_efforts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "elapsedTime", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "group_rides",
       "queryScope": "COLLECTION",
       "fields": [

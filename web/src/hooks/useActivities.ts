@@ -37,10 +37,11 @@ export function useActivities(maxItems = 30) {
 
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Activity);
+      console.log("[useActivities] Firestore loaded:", items.length, "activities");
       setActivities(items);
       setLoading(false);
-    }, () => {
-      // Fallback to demo on error
+    }, (err) => {
+      console.error("[useActivities] Firestore error, falling back to demo:", err);
       setActivities(demoActivities);
       setLoading(false);
     });
