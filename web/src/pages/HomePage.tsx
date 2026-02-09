@@ -14,7 +14,7 @@ function formatDuration(ms: number): string {
 
 export default function HomePage() {
   const { user, profile } = useAuth();
-  const { activities, loading, isDemo } = useActivities();
+  const { activities, totalCount, loading, isDemo, loadMore, hasMore } = useActivities();
   const { weeklyStats, thisWeek } = useWeeklyStats();
   const feed = [...activities].sort((a, b) => b.createdAt - a.createdAt);
 
@@ -27,7 +27,12 @@ export default function HomePage() {
       {/* Left: Activity Feed */}
       <div className="flex-1 min-w-0 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">활동 피드</h2>
+          <h2 className="text-lg font-bold text-gray-900">
+            활동 피드
+            {!isDemo && totalCount > 0 && (
+              <span className="ml-2 text-sm font-normal text-gray-400">{totalCount}개</span>
+            )}
+          </h2>
           {isDemo && (
             <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-medium">
               데모 모드
@@ -69,9 +74,19 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          feed.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} />
-          ))
+          <>
+            {feed.map((activity) => (
+              <ActivityCard key={activity.id} activity={activity} />
+            ))}
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                className="w-full py-3 text-sm font-medium text-orange-600 bg-white rounded-lg border border-gray-200 hover:bg-orange-50 transition-colors"
+              >
+                더 보기 ({totalCount - feed.length}개 남음)
+              </button>
+            )}
+          </>
         )}
       </div>
 

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngTuple } from "leaflet";
 import { decodePolyline } from "../utils/polyline";
 
@@ -14,6 +14,8 @@ interface RouteMapProps {
   interactive?: boolean;
   /** Rounded corners */
   rounded?: boolean;
+  /** Highlight marker position (synced from chart hover) */
+  markerPosition?: [number, number] | null;
 }
 
 function FitBounds({ bounds }: { bounds: LatLngBoundsExpression }) {
@@ -30,6 +32,7 @@ export default function RouteMap({
   height = "h-48",
   interactive = false,
   rounded = true,
+  markerPosition,
 }: RouteMapProps) {
   const positions: LatLngTuple[] = useMemo(() => {
     if (latlng && latlng.length > 0) {
@@ -98,6 +101,19 @@ export default function RouteMap({
             lineJoin: "round",
           }}
         />
+        {/* Hover marker from chart interaction */}
+        {markerPosition && (
+          <CircleMarker
+            center={markerPosition}
+            radius={7}
+            pathOptions={{
+              color: "#F97316",
+              fillColor: "#ffffff",
+              fillOpacity: 1,
+              weight: 3,
+            }}
+          />
+        )}
         <FitBounds bounds={bounds} />
       </MapContainer>
     </div>

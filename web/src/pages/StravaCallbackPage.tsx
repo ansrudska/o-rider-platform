@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useStrava } from "../hooks/useStrava";
+import { useStrava, type ImportProgress } from "../hooks/useStrava";
 import { useAuth } from "../contexts/AuthContext";
 
 type Step = "verifying" | "exchanging" | "importing" | "done" | "error";
@@ -9,10 +9,10 @@ export default function StravaCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { exchangeCode, importActivities } = useStrava();
+  const { exchangeCode, importAllActivities } = useStrava();
   const [step, setStep] = useState<Step>("verifying");
   const [errorMsg, setErrorMsg] = useState("");
-  const [importResult, setImportResult] = useState<{ imported: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -46,8 +46,7 @@ export default function StravaCallbackPage() {
         await exchangeCode(code);
 
         setStep("importing");
-        const result = await importActivities(1, 30);
-        setImportResult(result);
+        await importAllActivities((p) => setProgress({ ...p }));
 
         setStep("done");
         setTimeout(() => navigate("/"), 2000);
@@ -87,9 +86,14 @@ export default function StravaCallbackPage() {
         <p className="text-sm text-gray-500">
           {step === "verifying" && "요청을 확인하고 있습니다."}
           {step === "exchanging" && "Strava 계정을 연결하고 있습니다."}
-          {step === "importing" && "최근 활동을 가져오고 있습니다."}
-          {step === "done" && importResult && `${importResult.imported}개의 활동을 가져왔습니다. 잠시 후 이동합니다.`}
-          {step === "done" && !importResult && "잠시 후 이동합니다."}
+          {step === "importing" && progress && !progress.done && (
+            <>페이지 {progress.page} 처리 중 · {progress.totalImported}개 가져옴 · {progress.totalRides}개 Ride 검색됨</>
+          )}
+          {step === "importing" && !progress && "활동을 검색하고 있습니다..."}
+          {step === "done" && progress && (
+            <>{progress.totalImported}개의 활동을 가져왔습니다. 잠시 후 이동합니다.</>
+          )}
+          {step === "done" && !progress && "잠시 후 이동합니다."}
           {step === "error" && errorMsg}
         </p>
 
@@ -109,9 +113,9 @@ export default function StravaCallbackPage() {
               className="bg-orange-500 h-1.5 rounded-full transition-all duration-500"
               style={{
                 width:
-                  step === "verifying" ? "20%" :
-                  step === "exchanging" ? "50%" :
-                  "80%",
+                  step === "verifying" ? "10%" :
+                  step === "exchanging" ? "30%" :
+                  "60%",
               }}
             />
           </div>

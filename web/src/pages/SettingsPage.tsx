@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { useStrava } from "../hooks/useStrava";
+import { useStrava, type ImportProgress } from "../hooks/useStrava";
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
-  const { connectStrava, disconnectStrava, importActivities, loading, error } = useStrava();
-  const [importResult, setImportResult] = useState<{ imported: number; total: number } | null>(null);
-  const [importPage, setImportPage] = useState(1);
+  const { connectStrava, disconnectStrava, importAllActivities, loading, error } = useStrava();
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
 
   if (!user) {
     return (
@@ -16,10 +15,10 @@ export default function SettingsPage() {
     );
   }
 
-  const handleImport = async () => {
+  const handleImportAll = async () => {
+    setProgress(null);
     try {
-      const result = await importActivities(importPage, 30);
-      setImportResult(result);
+      await importAllActivities((p) => setProgress({ ...p }));
     } catch {
       // error is set in hook
     }
@@ -84,26 +83,54 @@ export default function SettingsPage() {
 
             {/* Import controls */}
             <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-600">페이지:</label>
-              <input
-                type="number"
-                min={1}
-                value={importPage}
-                onChange={(e) => setImportPage(Number(e.target.value))}
-                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-              />
               <button
-                onClick={handleImport}
+                onClick={handleImportAll}
                 disabled={loading}
                 className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
               >
-                {loading ? "가져오는 중..." : "활동 가져오기"}
+                {loading ? "가져오는 중..." : "전체 활동 가져오기"}
               </button>
             </div>
+            <p className="text-xs text-gray-400">
+              Strava의 모든 라이딩 기록을 가져옵니다. 이미 가져온 활동은 건너뜁니다.
+            </p>
 
-            {importResult && (
-              <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded">
-                {importResult.imported}개 새 활동 가져옴 (전체 {importResult.total}개 Ride 중)
+            {/* Progress display */}
+            {progress && (
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                {progress.done ? (
+                  <>
+                    <div className="flex items-center gap-2 text-green-600 font-medium text-sm">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      가져오기 완료
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {progress.totalImported > 0 ? (
+                        <>{progress.totalImported}개 새 활동 가져옴</>
+                      ) : (
+                        <>새로 가져올 활동이 없습니다</>
+                      )}
+                      <span className="text-gray-400 ml-1">
+                        ({progress.totalRides}개 Ride 검색, {progress.page}페이지)
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-sm text-orange-600 font-medium">
+                      <div className="w-3.5 h-3.5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                      페이지 {progress.page} 처리 중...
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {progress.totalImported}개 가져옴 · {progress.totalRides}개 Ride 검색됨
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div className="bg-orange-500 h-1.5 rounded-full transition-all duration-300 animate-pulse" style={{ width: "60%" }} />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
