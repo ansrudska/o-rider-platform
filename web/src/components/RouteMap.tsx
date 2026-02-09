@@ -131,12 +131,12 @@ export default function RouteMap({
             position={photo.location}
             icon={createPhotoIcon(photo.url)}
           >
-            <Popup minWidth={240} maxWidth={320} autoPan={false}>
+            <Popup minWidth={200} maxWidth={280} autoPan={false}>
               <div style={{ margin: "-14px -20px -14px -20px" }}>
                 <img
                   src={photo.url}
                   alt={photo.caption || ""}
-                  style={{ width: "100%", borderRadius: "4px" }}
+                  style={{ width: "100%", maxHeight: "280px", objectFit: "cover", borderRadius: "4px" }}
                 />
                 {photo.caption && (
                   <p style={{ margin: "8px 12px", fontSize: "12px", color: "#374151" }}>{photo.caption}</p>

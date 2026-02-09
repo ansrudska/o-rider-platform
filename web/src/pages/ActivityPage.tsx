@@ -433,7 +433,7 @@ export default function ActivityPage() {
                 href={photo.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="relative group overflow-hidden rounded-lg bg-gray-100 aspect-[4/3]"
+                className="relative group overflow-hidden rounded-lg bg-gray-100 aspect-square"
               >
                 <img
                   src={photo.url}
