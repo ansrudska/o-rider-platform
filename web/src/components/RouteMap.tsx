@@ -76,12 +76,26 @@ export default function RouteMap({
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        {/* Glow layer */}
+        <Polyline
+          positions={positions}
+          pathOptions={{
+            color: "#FDBA74",
+            weight: 10,
+            opacity: 0.45,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
+        {/* Main route line */}
         <Polyline
           positions={positions}
           pathOptions={{
             color: "#F97316",
-            weight: 3,
-            opacity: 0.9,
+            weight: 4,
+            opacity: 0.95,
+            lineCap: "round",
+            lineJoin: "round",
           }}
         />
         <FitBounds bounds={bounds} />
