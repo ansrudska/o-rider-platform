@@ -255,6 +255,9 @@ export default function ActivityPage() {
         height="h-80 sm:h-96"
         interactive
         markerPosition={markerPosition}
+        photos={photos
+          .filter((p) => p.url && p.location)
+          .map((p) => ({ id: p.id, url: p.url!, location: p.location!, caption: p.caption }))}
       />
 
       {/* Header */}

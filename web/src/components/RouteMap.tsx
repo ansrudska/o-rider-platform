@@ -1,7 +1,15 @@
 import { useMemo } from "react";
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngTuple } from "leaflet";
+import L from "leaflet";
 import { decodePolyline } from "../utils/polyline";
+
+export interface PhotoMarker {
+  id: string;
+  url: string;
+  location: [number, number];
+  caption?: string | null;
+}
 
 interface RouteMapProps {
   /** Encoded polyline string (from Strava summary_polyline) */
@@ -16,6 +24,8 @@ interface RouteMapProps {
   rounded?: boolean;
   /** Highlight marker position (synced from chart hover) */
   markerPosition?: [number, number] | null;
+  /** Photo markers on the route */
+  photos?: PhotoMarker[];
 }
 
 function FitBounds({ bounds }: { bounds: LatLngBoundsExpression }) {
@@ -26,6 +36,18 @@ function FitBounds({ bounds }: { bounds: LatLngBoundsExpression }) {
   return null;
 }
 
+function createPhotoIcon(url: string) {
+  return L.divIcon({
+    className: "",
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -20],
+    html: `<div style="width:36px;height:36px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);overflow:hidden;background:#f3f4f6;">
+      <img src="${url}" style="width:100%;height:100%;object-fit:cover;" />
+    </div>`,
+  });
+}
+
 export default function RouteMap({
   polyline,
   latlng,
@@ -33,6 +55,7 @@ export default function RouteMap({
   interactive = false,
   rounded = true,
   markerPosition,
+  photos,
 }: RouteMapProps) {
   const positions: LatLngTuple[] = useMemo(() => {
     if (latlng && latlng.length > 0) {
@@ -101,6 +124,27 @@ export default function RouteMap({
             lineJoin: "round",
           }}
         />
+        {/* Photo markers */}
+        {photos?.map((photo) => (
+          <Marker
+            key={photo.id}
+            position={photo.location}
+            icon={createPhotoIcon(photo.url)}
+          >
+            <Popup minWidth={240} maxWidth={320} autoPan={false}>
+              <div style={{ margin: "-14px -20px -14px -20px" }}>
+                <img
+                  src={photo.url}
+                  alt={photo.caption || ""}
+                  style={{ width: "100%", borderRadius: "4px" }}
+                />
+                {photo.caption && (
+                  <p style={{ margin: "8px 12px", fontSize: "12px", color: "#374151" }}>{photo.caption}</p>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        ))}
         {/* Hover marker from chart interaction */}
         {markerPosition && (
           <CircleMarker
