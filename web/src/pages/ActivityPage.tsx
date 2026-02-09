@@ -179,6 +179,14 @@ export default function ActivityPage() {
     return raw as SegmentEffortData[];
   }, [streams]);
 
+  // Photos from streams response
+  interface PhotoData { id: string; url: string | null; caption: string | null; location: [number, number] | null; }
+  const photos: PhotoData[] = useMemo(() => {
+    const raw = (streams as Record<string, unknown> | null)?.photos;
+    if (!Array.isArray(raw)) return [];
+    return raw as PhotoData[];
+  }, [streams]);
+
   if (loadingActivity) {
     return (
       <div className="space-y-6 max-w-4xl mx-auto">
@@ -402,6 +410,42 @@ export default function ActivityPage() {
             onHoverIndex={hasStreams ? handleElevHover : undefined}
             overlays={overlays.length > 0 ? overlays : undefined}
           />
+        </div>
+      )}
+
+      {/* Photos */}
+      {photos.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+            사진 ({photos.length})
+          </h3>
+          <div className={`grid gap-2 ${
+            photos.length === 1 ? "grid-cols-1" :
+            photos.length === 2 ? "grid-cols-2" :
+            "grid-cols-2 sm:grid-cols-3"
+          }`}>
+            {photos.map((photo) => photo.url && (
+              <a
+                key={photo.id}
+                href={photo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative group overflow-hidden rounded-lg bg-gray-100 aspect-[4/3]"
+              >
+                <img
+                  src={photo.url}
+                  alt={photo.caption || ""}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy"
+                />
+                {photo.caption && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+                    <p className="text-xs text-white truncate">{photo.caption}</p>
+                  </div>
+                )}
+              </a>
+            ))}
+          </div>
         </div>
       )}
 

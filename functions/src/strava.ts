@@ -258,8 +258,8 @@ export const stravaGetActivityStreams = onCall(
       const cachedData = cached.data()!;
       if (typeof cachedData.json === "string") {
         const parsed = JSON.parse(cachedData.json);
-        // Cache must include segment_efforts (added in v2)
-        if ("segment_efforts" in parsed) {
+        // Cache must include segment_efforts and photos (v3)
+        if ("segment_efforts" in parsed && "photos" in parsed) {
           return parsed;
         }
         console.log(`[stravaStreams] Cache missing segments for ${stravaActivityId}, re-fetching`);
@@ -273,14 +273,18 @@ export const stravaGetActivityStreams = onCall(
     const accessToken = await getValidAccessToken(uid);
     const headers = { Authorization: `Bearer ${accessToken}` };
 
-    // Fetch streams and activity detail (for segment efforts) in parallel
-    const [streamsResp, detailResp] = await Promise.all([
+    // Fetch streams, activity detail, and photos in parallel
+    const [streamsResp, detailResp, photosResp] = await Promise.all([
       fetch(
         `https://www.strava.com/api/v3/activities/${stravaActivityId}/streams?keys=latlng,altitude,heartrate,watts,cadence,velocity_smooth,time,distance&key_by_type=true`,
         { headers },
       ),
       fetch(
         `https://www.strava.com/api/v3/activities/${stravaActivityId}?include_all_efforts=true`,
+        { headers },
+      ),
+      fetch(
+        `https://www.strava.com/api/v3/activities/${stravaActivityId}/photos?size=600&photo_sources=true`,
         { headers },
       ),
     ]);
@@ -399,7 +403,7 @@ export const stravaGetActivityStreams = onCall(
 
         // Save effort
         const effortDocId = `strava_${e.id}`;
-        const effortRef = db.doc(`segment_efforts/${segDocId}/${effortDocId}`);
+        const effortRef = db.doc(`segment_efforts/${segDocId}/efforts/${effortDocId}`);
         const startDate = detail.start_date
           ? new Date(detail.start_date as string).getTime()
           : Date.now();
@@ -430,6 +434,27 @@ export const stravaGetActivityStreams = onCall(
       if (segSaved > 0 || effortSaved > 0) {
         await batch.commit();
         console.log(`[stravaStreams] Saved ${segSaved} segments, ${effortSaved} efforts to DB`);
+      }
+    }
+
+    // Extract photos
+    if (photosResp.ok) {
+      interface StravaPhoto {
+        unique_id: string;
+        urls: Record<string, string>;
+        caption?: string;
+        location?: [number, number];
+        created_at?: string;
+      }
+      const photos = (await photosResp.json()) as StravaPhoto[];
+      if (photos.length > 0) {
+        streamData.photos = photos.map((p) => ({
+          id: p.unique_id,
+          url: p.urls?.["600"] ?? p.urls?.["100"] ?? Object.values(p.urls ?? {})[0] ?? null,
+          caption: p.caption ?? null,
+          location: p.location ?? null,
+        }));
+        console.log(`[stravaStreams] activity=${stravaActivityId} photos=${photos.length}`);
       }
     }
 

@@ -61,7 +61,7 @@ service cloud.firestore {
     }
 
     // Segment Efforts: public read (leaderboard), owner create
-    match /segment_efforts/{segmentId}/{effortId} {
+    match /segment_efforts/{segmentId}/efforts/{effortId} {
       allow read: if true;
       allow create: if request.auth != null
                     && request.resource.data.userId == request.auth.uid;
