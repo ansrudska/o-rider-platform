@@ -273,6 +273,10 @@ export const stravaGetActivityStreams = onCall(
     const accessToken = await getValidAccessToken(uid);
     const headers = { Authorization: `Bearer ${accessToken}` };
 
+    // Get user nickname for effort records
+    const userDoc = await db.doc(`users/${uid}`).get();
+    const nickname = userDoc.data()?.nickname ?? "Rider";
+
     // Fetch streams, activity detail, and photos in parallel
     const [streamsResp, detailResp, photosResp] = await Promise.all([
       fetch(
@@ -412,6 +416,7 @@ export const stravaGetActivityStreams = onCall(
           segmentId: segDocId,
           activityId: `strava_${stravaActivityId}`,
           userId: uid,
+          nickname,
           elapsedTime: e.elapsed_time * 1000,
           movingTime: e.moving_time * 1000,
           distance: e.distance,
