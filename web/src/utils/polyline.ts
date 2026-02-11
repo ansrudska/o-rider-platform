@@ -1,4 +1,31 @@
 /**
+ * Decode a track string to [lat, lng] array.
+ * Supports both "lat,lon;lat,lon;..." (O-Rider) and Google Encoded Polyline (Strava).
+ */
+export function decodeTrack(str: string): [number, number][] {
+  if (!str || str.length === 0) return [];
+
+  // O-Rider format: "lat,lon;lat,lon;..."
+  if (str.includes(";") && str.includes(",")) {
+    const points: [number, number][] = [];
+    for (const pair of str.split(";")) {
+      const parts = pair.split(",");
+      if (parts.length === 2) {
+        const lat = parseFloat(parts[0]);
+        const lng = parseFloat(parts[1]);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          points.push([lat, lng]);
+        }
+      }
+    }
+    if (points.length > 0) return points;
+  }
+
+  // Fallback: Google Encoded Polyline
+  return decodePolyline(str);
+}
+
+/**
  * Decode Google Encoded Polyline to [lat, lng] array.
  * https://developers.google.com/maps/documentation/utilities/polylinealgorithm
  */

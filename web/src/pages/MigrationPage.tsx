@@ -377,7 +377,27 @@ export default function MigrationPage() {
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">복사 완료!</h1>
-            <p className="text-sm text-gray-500">모든 기록이 안전하게 보관되었습니다.</p>
+            <p className="text-sm text-gray-500">
+              스트라바의 기록이 O-Rider에 복사되었습니다.
+            </p>
+          </div>
+
+          {/* Auto-sync info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="text-sm font-medium text-blue-800">자동 동기화 활성화됨</span>
+            </div>
+            <p className="text-xs text-blue-600">
+              앞으로 스트라바에 새 활동이 올라오면 O-Rider에 자동으로 추가됩니다.
+            </p>
+            {report.latestActivity > 0 && (
+              <p className="text-xs text-blue-500">
+                마지막으로 가져온 라이딩: {formatDateTime(report.latestActivity)}
+              </p>
+            )}
           </div>
 
           {/* Stats grid */}
@@ -417,20 +437,12 @@ export default function MigrationPage() {
             </div>
           )}
 
-          <div className="space-y-2 pt-2">
-            <button
-              onClick={() => navigate("/")}
-              className="w-full px-4 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
-            >
-              내 기록 보기
-            </button>
-            <button
-              onClick={() => navigate("/settings")}
-              className="w-full px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              스트라바와 계속 병행 사용하기
-            </button>
-          </div>
+          <button
+            onClick={() => navigate("/")}
+            className="w-full px-4 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
+          >
+            내 기록 보기
+          </button>
         </div>
       )}
 
@@ -468,4 +480,14 @@ function formatDuration(ms: number): string {
 function formatDate(ts: number): string {
   const d = new Date(ts);
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateTime(ts: number): string {
+  return new Date(ts).toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

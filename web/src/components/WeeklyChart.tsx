@@ -6,7 +6,13 @@ import {
   BarElement,
   Tooltip,
 } from "chart.js";
-import type { WeeklyStat } from "../data/demo";
+export interface WeeklyStat {
+  week: string;
+  distance: number;
+  time: number;
+  elevation: number;
+  rides: number;
+}
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip);
 

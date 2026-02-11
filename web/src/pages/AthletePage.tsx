@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { firestore } from "../services/firebase";
+import {
+  collection, query, where, orderBy, getDocs,
+  doc, getDoc, setDoc, deleteDoc,
+} from "firebase/firestore";
+import { ref, get } from "firebase/database";
+import { firestore, database } from "../services/firebase";
 import { useDocument } from "../hooks/useFirestore";
 import { useAuth } from "../contexts/AuthContext";
 import StatCard from "../components/StatCard";
 import ActivityCard from "../components/ActivityCard";
 import Avatar from "../components/Avatar";
 import type { Activity, UserProfile } from "@shared/types";
-import {
-  riders,
-  getActivitiesForUser,
-} from "../data/demo";
 
 function formatHours(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -22,20 +22,30 @@ function formatHours(ms: number): string {
 
 export default function AthletePage() {
   const { userId } = useParams<{ userId: string }>();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, profile: currentProfile } = useAuth();
 
-  // Try Firestore profile first
   const { data: firestoreProfile, loading: profileLoading } = useDocument<UserProfile>("users", userId);
 
-  // Fallback to demo rider
-  const demoRider = riders.find((r) => r.id === userId);
-
-  // Firestore activities for real users
   const [firestoreActivities, setFirestoreActivities] = useState<Activity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
 
+  const [friendCode, setFriendCode] = useState<string | null>(null);
+
+  // Follow state
+  const [following, setFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+
   useEffect(() => {
-    if (!userId || demoRider) return;
+    if (!userId) return;
+    get(ref(database, `users/${userId}/friendCode`)).then((snap) => {
+      if (snap.exists()) setFriendCode(snap.val());
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
 
     setActivitiesLoading(true);
     const q = query(
@@ -51,15 +61,59 @@ export default function AthletePage() {
       })
       .catch((err) => console.error("Failed to fetch activities:", err))
       .finally(() => setActivitiesLoading(false));
-  }, [userId, demoRider]);
+  }, [userId]);
 
-  // Choose data source
-  const nickname = firestoreProfile?.nickname ?? demoRider?.nickname;
+  // Check if current user follows this profile
+  useEffect(() => {
+    if (!currentUser || !userId || currentUser.uid === userId) return;
+
+    getDoc(doc(firestore, "following", currentUser.uid, "users", userId))
+      .then((snap) => setFollowing(snap.exists()))
+      .catch(() => {});
+  }, [currentUser, userId]);
+
+  // Fetch follower / following counts
+  useEffect(() => {
+    if (!userId) return;
+
+    getDocs(collection(firestore, "followers", userId, "users"))
+      .then((snap) => setFollowerCount(snap.size))
+      .catch(() => {});
+    getDocs(collection(firestore, "following", userId, "users"))
+      .then((snap) => setFollowingCount(snap.size))
+      .catch(() => {});
+  }, [userId]);
+
+  const handleToggleFollow = async () => {
+    if (!currentUser || !userId || followLoading) return;
+
+    setFollowLoading(true);
+    const ref = doc(firestore, "following", currentUser.uid, "users", userId);
+    try {
+      if (following) {
+        await deleteDoc(ref);
+        setFollowing(false);
+        setFollowerCount((c) => Math.max(0, c - 1));
+      } else {
+        await setDoc(ref, {
+          userId: currentUser.uid,
+          nickname: currentProfile?.nickname || currentUser.displayName || "",
+          profileImage: currentProfile?.photoURL || currentUser.photoURL || null,
+          createdAt: Date.now(),
+        });
+        setFollowing(true);
+        setFollowerCount((c) => c + 1);
+      }
+    } catch (err) {
+      console.error("Follow toggle failed:", err);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const nickname = firestoreProfile?.nickname;
   const photoURL = firestoreProfile?.photoURL ?? null;
-  const activities = demoRider
-    ? getActivitiesForUser(userId ?? "")
-    : firestoreActivities;
-
+  const activities = firestoreActivities;
   const isMe = currentUser?.uid === userId;
 
   const totalDistance = useMemo(
@@ -114,17 +168,26 @@ export default function AthletePage() {
       {/* Profile info */}
       <div className="pt-8 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{nickname}</h1>
-          {firestoreProfile?.email && (
-            <p className="text-gray-500 text-sm mt-0.5">{firestoreProfile.email}</p>
-          )}
-          {demoRider?.bio && (
-            <p className="text-gray-500 text-sm mt-0.5">{demoRider.bio}</p>
-          )}
+          <h1 className="text-2xl font-bold">
+            {nickname}
+            {friendCode && <span className="text-sm font-normal text-gray-400 ml-2">({friendCode})</span>}
+          </h1>
+          <div className="flex gap-4 mt-2 text-sm text-gray-600">
+            <span><strong className="text-gray-900">{followerCount}</strong> 팔로워</span>
+            <span><strong className="text-gray-900">{followingCount}</strong> 팔로잉</span>
+          </div>
         </div>
-        {!isMe && (
-          <button className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
-            팔로우
+        {!isMe && currentUser && (
+          <button
+            onClick={handleToggleFollow}
+            disabled={followLoading}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              following
+                ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                : "bg-orange-500 text-white hover:bg-orange-600"
+            } disabled:opacity-50`}
+          >
+            {followLoading ? "..." : following ? "팔로잉" : "팔로우"}
           </button>
         )}
       </div>

@@ -7,7 +7,7 @@ const db = admin.firestore();
  * 댓글 생성 시: commentCount 증가 + 알림 발송
  */
 export const onCommentCreate = onDocumentCreated(
-  "comments/{activityId}/{commentId}",
+  "activities/{activityId}/comments/{commentId}",
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;

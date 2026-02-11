@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import RouteMap from "../components/RouteMap";
 import ElevationChart from "../components/ElevationChart";
 import type { OverlayDataset } from "../components/ElevationChart";
@@ -7,12 +7,9 @@ import Avatar from "../components/Avatar";
 import { useAuth } from "../contexts/AuthContext";
 import { useStrava } from "../hooks/useStrava";
 import {
-  activities as demoActivities,
-  comments,
-  kudos,
-  generateElevationProfile,
-} from "../data/demo";
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
+  doc, getDoc, setDoc, deleteDoc, addDoc, updateDoc,
+  collection, query, where, getDocs, orderBy, onSnapshot,
+} from "firebase/firestore";
 import { firestore } from "../services/firebase";
 import type { Activity, Visibility } from "@shared/types";
 import type { ActivityStreams } from "@shared/types";
@@ -99,6 +96,7 @@ interface SampledPoint {
 
 export default function ActivityPage() {
   const { activityId } = useParams<{ activityId: string }>();
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { getStreams } = useStrava();
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -107,16 +105,16 @@ export default function ActivityPage() {
   const [showStreamSpinner, setShowStreamSpinner] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [coRiders, setCoRiders] = useState<Activity[]>([]);
+  const [liked, setLiked] = useState(false);
+  const [kudosList, setKudosList] = useState<{ userId: string; nickname: string }[]>([]);
+  const [commentsList, setCommentsList] = useState<{ id: string; userId: string; nickname: string; profileImage: string | null; text: string; createdAt: number }[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   useEffect(() => {
     if (!activityId) return;
-
-    const demoActivity = demoActivities.find((a) => a.id === activityId);
-    if (demoActivity) {
-      setActivity(demoActivity);
-      setLoadingActivity(false);
-      return;
-    }
 
     if (user) {
       getDoc(doc(firestore, "activities", activityId)).then((snap) => {
@@ -163,6 +161,89 @@ export default function ActivityPage() {
       );
     }).catch(() => {});
   }, [activity?.groupRideId, activity?.id]);
+
+  // Real-time kudos subscription
+  useEffect(() => {
+    if (!activityId || !user) return;
+    const kudosRef = collection(firestore, "activities", activityId, "kudos");
+    return onSnapshot(kudosRef, (snap) => {
+      const list = snap.docs.map((d) => ({ userId: d.id, ...d.data() } as { userId: string; nickname: string }));
+      setKudosList(list);
+      setLiked(list.some((k) => k.userId === user.uid));
+    });
+  }, [activityId, user]);
+
+  // Real-time comments subscription
+  useEffect(() => {
+    if (!activityId || !user) return;
+    const commentsRef = query(
+      collection(firestore, "activities", activityId, "comments"),
+      orderBy("createdAt", "asc"),
+    );
+    return onSnapshot(commentsRef, (snap) => {
+      setCommentsList(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as typeof commentsList[0])),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityId, user]);
+
+  const handleToggleKudos = async () => {
+    if (!user || !activityId || !profile) return;
+    const kudosDocRef = doc(firestore, "activities", activityId, "kudos", user.uid);
+    if (liked) {
+      setLiked(false);
+      await deleteDoc(kudosDocRef);
+    } else {
+      setLiked(true);
+      await setDoc(kudosDocRef, {
+        nickname: profile.nickname ?? user.displayName ?? "User",
+        profileImage: user.photoURL ?? null,
+        createdAt: Date.now(),
+      });
+    }
+  };
+
+  const submittingRef = useRef(false);
+  const handleSubmitComment = async () => {
+    if (!user || !activityId || !profile || !commentText.trim() || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      await addDoc(collection(firestore, "activities", activityId, "comments"), {
+        userId: user.uid,
+        nickname: profile.nickname ?? user.displayName ?? "User",
+        profileImage: user.photoURL ?? null,
+        text: commentText.trim(),
+        createdAt: Date.now(),
+      });
+      setCommentText("");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!activityId) return;
+    await deleteDoc(doc(firestore, "activities", activityId, "comments", commentId));
+  };
+
+  const handleSaveEditComment = async () => {
+    if (!activityId || !editingCommentId || !editingText.trim()) return;
+    await updateDoc(doc(firestore, "activities", activityId, "comments", editingCommentId), {
+      text: editingText.trim(),
+    });
+    setEditingCommentId(null);
+    setEditingText("");
+  };
+
+  const handleDeleteActivity = async () => {
+    if (!activityId || !user || user.uid !== activity?.userId) return;
+    if (!window.confirm("이 활동을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+    await deleteDoc(doc(firestore, "activities", activityId));
+    navigate("/", { replace: true });
+  };
 
   const handleElevHover = useCallback((index: number | null) => {
     setHoverIndex(index);
@@ -234,16 +315,13 @@ export default function ActivityPage() {
   }
 
   const s = activity.summary;
-  const isDemo = demoActivities.some((a) => a.id === activity.id);
   const isStrava = (activity as Activity & { source?: string }).source === "strava";
   const hasStreams = sampledData.length > 0;
 
-  // Elevation data: real streams or demo-generated
+  // Elevation data from streams
   const elevData = hasStreams
     ? sampledData.map((d) => ({ distance: d.distance, elevation: d.altitude }))
-    : isDemo
-      ? generateElevationProfile(s.distance, s.elevationGain)
-      : [];
+    : [];
 
   // Performance overlays for combined chart
   const overlays: OverlayDataset[] = [];
@@ -258,8 +336,8 @@ export default function ActivityPage() {
       overlays.push({ label: "케이던스 (rpm)", data: sampledData.map((d) => d.cadence), color: "rgba(16, 185, 129, 0.7)", yAxisID: "yCadence" });
   }
 
-  const activityComments = isDemo ? (comments[activity.id] ?? []) : [];
-  const activityKudos = isDemo ? (kudos[activity.id] ?? []) : [];
+  const activityComments = commentsList;
+  const activityKudos = kudosList;
 
   // Top results: efforts with PR or KOM achievements
   const topResults = segmentEfforts.filter(
@@ -310,7 +388,7 @@ export default function ActivityPage() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900">{activity.description || "라이딩"}</h1>
             <div className="text-sm text-gray-500 mt-1">{formatFullDate(activity.startTime)}</div>
-            {user?.uid === activity.userId && !isDemo && (
+            {user?.uid === activity.userId && (
               <div className="flex items-center gap-1.5 mt-2">
                 {([
                   { value: "everyone", label: "전체 공개", icon: "🌐" },
@@ -332,6 +410,12 @@ export default function ActivityPage() {
                     {opt.icon} {opt.label}
                   </button>
                 ))}
+                <button
+                  onClick={handleDeleteActivity}
+                  className="ml-auto px-2 py-1 text-xs rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  삭제
+                </button>
               </div>
             )}
           </div>
@@ -634,14 +718,20 @@ export default function ActivityPage() {
       {/* Kudos + Comments */}
       <div className="bg-white rounded-lg border border-gray-200 p-5">
         <div className="flex items-center gap-4 pb-3 border-b border-gray-100">
-          <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-orange-500 transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <button
+            onClick={handleToggleKudos}
+            disabled={!user}
+            className={`flex items-center gap-1.5 text-sm transition-colors ${
+              liked ? "text-orange-500" : "text-gray-500 hover:text-orange-500"
+            } disabled:opacity-50`}
+          >
+            <svg className="w-5 h-5" fill={liked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
             </svg>
-            좋아요 {(activity.kudosCount || activityKudos.length) > 0 ? `${activity.kudosCount || activityKudos.length}` : ""}
+            좋아요{activityKudos.length > 0 ? ` ${activityKudos.length}` : ""}
           </button>
           <span className="text-sm text-gray-500">
-            댓글 {(activity.commentCount || activityComments.length) > 0 ? `${activity.commentCount || activityComments.length}` : "0"}
+            댓글 {activityComments.length > 0 ? activityComments.length : "0"}
           </span>
         </div>
 
@@ -664,11 +754,66 @@ export default function ActivityPage() {
                   <div className="flex items-center gap-2">
                     <Link to={`/athlete/${c.userId}`} className="text-xs font-semibold hover:text-orange-600">{c.nickname}</Link>
                     <span className="text-xs text-gray-400">{timeAgo(c.createdAt)}</span>
+                    {user?.uid === c.userId && editingCommentId !== c.id && (
+                      <span className="ml-auto flex gap-1">
+                        <button
+                          onClick={() => { setEditingCommentId(c.id); setEditingText(c.text); }}
+                          className="text-xs text-gray-400 hover:text-orange-500"
+                        >수정</button>
+                        <button
+                          onClick={() => { if (window.confirm("댓글을 삭제하시겠습니까?")) handleDeleteComment(c.id); }}
+                          className="text-xs text-gray-400 hover:text-red-500"
+                        >삭제</button>
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm text-gray-700 mt-0.5">{c.text}</p>
+                  {editingCommentId === c.id ? (
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); handleSaveEditComment(); } if (e.key === "Escape") { setEditingCommentId(null); } }}
+                        autoFocus
+                        className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:border-orange-300"
+                      />
+                      <button onClick={handleSaveEditComment} disabled={!editingText.trim()} className="text-xs text-orange-500 hover:text-orange-600 font-medium disabled:opacity-50">저장</button>
+                      <button onClick={() => setEditingCommentId(null)} className="text-xs text-gray-400 hover:text-gray-600">취소</button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-700 mt-0.5">{c.text}</p>
+                  )}
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Comment input */}
+        {user && (
+          <div className="pt-3 flex items-start gap-2">
+            <Avatar
+              name={profile?.nickname ?? user.displayName ?? "User"}
+              imageUrl={user.photoURL}
+              size="sm"
+            />
+            <div className="flex-1 flex gap-2">
+              <input
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSubmitComment(); } }}
+                placeholder="댓글을 입력하세요..."
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-orange-300"
+              />
+              <button
+                onClick={handleSubmitComment}
+                disabled={submitting || !commentText.trim()}
+                className="px-3 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              >
+                등록
+              </button>
+            </div>
           </div>
         )}
       </div>

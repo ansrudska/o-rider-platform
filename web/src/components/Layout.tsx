@@ -1,7 +1,25 @@
-import { useState } from "react";
-import { Outlet, Link, NavLink } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, Link, NavLink, useNavigate } from "react-router-dom";
+import {
+  collection, query, orderBy, limit, onSnapshot, writeBatch, doc,
+} from "firebase/firestore";
+import { firestore } from "../services/firebase";
 import Avatar from "./Avatar";
 import { useAuth } from "../contexts/AuthContext";
+import type { Notification } from "@shared/types";
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "방금 전";
+  if (mins < 60) return `${mins}분 전`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "어제";
+  if (days < 7) return `${days}일 전`;
+  return new Date(ts).toLocaleDateString("ko-KR");
+}
 
 const BASE_NAV_ITEMS = [
   { to: "/", label: "대시보드" },
@@ -11,7 +29,10 @@ const BASE_NAV_ITEMS = [
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const { user, profile, loading, signInWithGoogle, logout } = useAuth();
+  const navigate = useNavigate();
 
   const migrationStatus = profile?.migration?.status;
   const showMigrate = user && profile && profile.stravaConnected;
@@ -21,6 +42,62 @@ export default function Layout() {
     ...BASE_NAV_ITEMS,
     ...(showMigrate ? [{ to: "/migrate", label: migrationLabel }] : []),
   ];
+
+  // Real-time notification subscription
+  useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+    const q = query(
+      collection(firestore, "notifications", user.uid, "items"),
+      orderBy("createdAt", "desc"),
+      limit(20),
+    );
+    return onSnapshot(q, (snap) => {
+      setNotifications(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Notification),
+      );
+    }, () => {});
+  }, [user]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const handleMarkAllRead = async () => {
+    if (!user || unreadCount === 0) return;
+    const batch = writeBatch(firestore);
+    notifications
+      .filter((n) => !n.read)
+      .forEach((n) => {
+        batch.update(doc(firestore, "notifications", user.uid, "items", n.id), { read: true });
+      });
+    await batch.commit();
+  };
+
+  const handleNotifClick = (n: Notification) => {
+    // Mark as read
+    if (!n.read && user) {
+      import("firebase/firestore").then(({ updateDoc }) => {
+        updateDoc(doc(firestore, "notifications", user.uid, "items", n.id), { read: true });
+      });
+    }
+    setNotifOpen(false);
+    if (n.activityId) {
+      navigate(`/activity/${n.activityId}`);
+    } else if (n.type === "follow") {
+      navigate(`/athlete/${n.fromUserId}`);
+    }
+  };
+
+  const notifIcon = (type: string) => {
+    switch (type) {
+      case "kudos": return "👍";
+      case "comment": return "💬";
+      case "follow": return "👤";
+      case "kom": return "👑";
+      default: return "🔔";
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -66,27 +143,83 @@ export default function Layout() {
             ) : user ? (
               <>
                 {/* Notification bell */}
-                <button className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                <div className="relative">
+                  <button
+                    onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}
+                    className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                    />
-                  </svg>
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full" />
-                </button>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                      />
+                    </svg>
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-orange-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  {notifOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setNotifOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                          <span className="text-sm font-semibold">알림</span>
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={handleMarkAllRead}
+                              className="text-xs text-orange-500 hover:text-orange-600"
+                            >
+                              모두 읽음
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {notifications.length === 0 ? (
+                            <div className="px-4 py-8 text-center text-sm text-gray-400">
+                              알림이 없습니다.
+                            </div>
+                          ) : (
+                            notifications.map((n) => (
+                              <button
+                                key={n.id}
+                                onClick={() => handleNotifClick(n)}
+                                className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 ${
+                                  !n.read ? "bg-orange-50/50" : ""
+                                }`}
+                              >
+                                <span className="text-base mt-0.5">{notifIcon(n.type)}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-700 line-clamp-2">{n.message}</p>
+                                  <span className="text-xs text-gray-400 mt-0.5">{timeAgo(n.createdAt)}</span>
+                                </div>
+                                {!n.read && (
+                                  <span className="w-2 h-2 bg-orange-500 rounded-full mt-1.5 shrink-0" />
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 {/* Profile dropdown */}
                 <div className="relative">
                   <button
-                    onClick={() => setProfileOpen(!profileOpen)}
+                    onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); }}
                     className="flex items-center gap-2"
                   >
                     {user.photoURL ? (
@@ -110,9 +243,6 @@ export default function Layout() {
                         <div className="px-4 py-2 border-b border-gray-100">
                           <div className="text-sm font-medium text-gray-900 truncate">
                             {profile?.nickname ?? user.displayName}
-                          </div>
-                          <div className="text-xs text-gray-500 truncate">
-                            {user.email}
                           </div>
                         </div>
                         <Link
@@ -240,18 +370,14 @@ export default function Layout() {
         )}
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-6 relative z-0">
         <Outlet />
       </main>
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white mt-12">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between text-xs text-gray-400">
+        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-gray-400">
           <span>&copy; 2026 O-Rider</span>
-          <div className="flex gap-4">
-            <span>서비스 약관</span>
-            <span>개인정보 처리방침</span>
-          </div>
         </div>
       </footer>
     </div>

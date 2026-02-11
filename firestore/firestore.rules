@@ -4,18 +4,18 @@ service cloud.firestore {
 
     // Helper: check if user follows target
     function isFollowing(userId, targetId) {
-      return exists(/databases/$(database)/documents/following/$(userId)/$(targetId));
+      return exists(/databases/$(database)/documents/following/$(userId)/users/$(targetId));
     }
 
     // Activities: owner write, visibility-based read
     match /activities/{activityId} {
       allow create: if request.auth != null
                     && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null
-                  && (resource.data.userId == request.auth.uid
-                      || resource.data.visibility == "everyone"
-                      || (resource.data.visibility == "friends"
-                          && isFollowing(request.auth.uid, resource.data.userId)));
+      allow read: if resource.data.visibility == "everyone"
+                  || (request.auth != null
+                      && (resource.data.userId == request.auth.uid
+                          || (resource.data.visibility == "friends"
+                              && isFollowing(request.auth.uid, resource.data.userId))));
       allow update, delete: if request.auth != null
                             && request.auth.uid == resource.data.userId;
     }
@@ -32,23 +32,27 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Kudos
-    match /kudos/{activityId}/{userId} {
+    // Kudos (subcollection of activities)
+    match /activities/{activityId}/kudos/{userId} {
       allow read: if request.auth != null;
       allow create, delete: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Comments
-    match /comments/{activityId}/{commentId} {
+    // Comments (subcollection of activities)
+    match /activities/{activityId}/comments/{commentId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
                     && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.userId
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['text']);
       allow delete: if request.auth != null
                     && request.auth.uid == resource.data.userId;
     }
 
-    // Notifications: owner read/update only
-    match /notifications/{userId}/{notifId} {
+    // Notifications: owner read/update only (subcollection: notifications/{userId}/items/{notifId})
+    match /notifications/{userId}/items/{notifId} {
       allow read, update: if request.auth != null && request.auth.uid == userId;
     }
 
@@ -72,14 +76,14 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Following
-    match /following/{userId}/{targetId} {
+    // Following (subcollection: following/{userId}/users/{targetId})
+    match /following/{userId}/users/{targetId} {
       allow read: if request.auth != null;
       allow create, delete: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Followers (written by Cloud Functions)
-    match /followers/{targetId}/{userId} {
+    // Followers (subcollection: followers/{targetId}/users/{userId}, written by Cloud Functions)
+    match /followers/{targetId}/users/{userId} {
       allow read: if request.auth != null;
     }
 
@@ -93,7 +97,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow update: if request.auth != null && request.auth.uid == userId
                     && request.resource.data.diff(resource.data).affectedKeys()
-                       .hasOnly(['defaultVisibility']);
+                       .hasOnly(['defaultVisibility', 'nickname']);
       allow create, delete: if false;
     }
 
@@ -102,11 +106,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Activity streams cache (written by Cloud Functions)
+    // Activity streams cache (written by Cloud Functions or client)
     match /activity_streams/{streamId} {
       allow read: if request.auth != null
                   && resource.data.userId == request.auth.uid;
-      allow write: if false;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
   }
 }

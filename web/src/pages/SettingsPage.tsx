@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../services/firebase";
+import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
+import { ref, get } from "firebase/database";
+import { firestore, database, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useStrava } from "../hooks/useStrava";
 import type { Visibility } from "@shared/types";
@@ -14,6 +16,17 @@ export default function SettingsPage() {
   const [selectedVisibility, setSelectedVisibility] = useState<Visibility | null>(null);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [visibilityResult, setVisibilityResult] = useState<string | null>(null);
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [nicknameSaving, setNicknameSaving] = useState(false);
+  const [friendCode, setFriendCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    get(ref(database, `users/${user.uid}/friendCode`)).then((snap) => {
+      if (snap.exists()) setFriendCode(snap.val());
+    });
+  }, [user]);
 
   if (!user) {
     return (
@@ -22,6 +35,28 @@ export default function SettingsPage() {
       </div>
     );
   }
+
+  const handleSaveNickname = async () => {
+    const trimmed = nicknameInput.trim();
+    if (!trimmed || !user) return;
+    setNicknameSaving(true);
+    try {
+      // Update profile
+      await updateDoc(doc(firestore, "users", user.uid), { nickname: trimmed });
+      // Update all activities with the new nickname
+      const activitiesSnap = await getDocs(
+        query(collection(firestore, "activities"), where("userId", "==", user.uid)),
+      );
+      if (!activitiesSnap.empty) {
+        const batch = writeBatch(firestore);
+        activitiesSnap.docs.forEach((d) => batch.update(d.ref, { nickname: trimmed }));
+        await batch.commit();
+      }
+      setEditingNickname(false);
+    } finally {
+      setNicknameSaving(false);
+    }
+  };
 
   const handleDisconnect = async () => {
     if (!window.confirm("Strava 연동을 해제하시겠습니까?")) return;
@@ -63,9 +98,67 @@ export default function SettingsPage() {
               {(profile?.nickname ?? "U").charAt(0)}
             </div>
           )}
-          <div>
-            <div className="font-semibold">{profile?.nickname ?? user.displayName}</div>
-            <div className="text-sm text-gray-500">{user.email}</div>
+          <div className="flex-1">
+            {editingNickname ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={nicknameInput}
+                  onChange={(e) => setNicknameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      handleSaveNickname();
+                    }
+                    if (e.key === "Escape") setEditingNickname(false);
+                  }}
+                  maxLength={20}
+                  autoFocus
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-orange-400 w-48"
+                />
+                <button
+                  onClick={handleSaveNickname}
+                  disabled={nicknameSaving || !nicknameInput.trim()}
+                  className="px-3 py-1.5 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {nicknameSaving ? "저장 중..." : "저장"}
+                </button>
+                <button
+                  onClick={() => setEditingNickname(false)}
+                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">{profile?.nickname ?? user.displayName}</span>
+                <button
+                  onClick={() => {
+                    setNicknameInput(profile?.nickname ?? user.displayName ?? "");
+                    setEditingNickname(true);
+                  }}
+                  className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
+                >
+                  수정
+                </button>
+              </div>
+            )}
+            {friendCode && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-gray-500">친구 코드</span>
+                <span className="font-mono font-semibold text-sm text-orange-600 bg-orange-50 px-2 py-0.5 rounded">{friendCode}</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(friendCode); }}
+                  className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
+                  title="복사"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -206,6 +299,7 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
     </div>
   );
 }

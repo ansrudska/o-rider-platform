@@ -9,12 +9,11 @@ import {
 } from "firebase/firestore";
 import { firestore } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { activities as demoActivities, getWeeklyStats as getDemoWeeklyStats, getThisWeekSummary as getDemoThisWeekSummary } from "../data/demo";
 import type { Activity } from "@shared/types";
+import type { WeeklyStat } from "../components/WeeklyChart";
 
 export function useActivities() {
-  const { user, profile } = useAuth();
-  const isStrava = !!user && !!profile?.stravaConnected;
+  const { user } = useAuth();
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,34 +22,37 @@ export function useActivities() {
   useEffect(() => {
     setDisplayCount(20);
 
-    if (!isStrava || !user) {
-      // Demo mode
-      setActivities(demoActivities);
-      setLoading(false);
-      return;
+    let q;
+    if (user) {
+      // Logged in: own activities (Strava + O-Rider)
+      q = query(
+        collection(firestore, "activities"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "desc"),
+        limit(500),
+      );
+    } else {
+      // Not logged in: public activities from everyone
+      q = query(
+        collection(firestore, "activities"),
+        where("visibility", "==", "everyone"),
+        orderBy("createdAt", "desc"),
+        limit(50),
+      );
     }
-
-    // Firestore real data — fetch up to 500 for stats + pagination
-    const q = query(
-      collection(firestore, "activities"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
-      limit(500),
-    );
 
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Activity);
-      console.log("[useActivities] Firestore loaded:", items.length, "activities");
       setActivities(items);
       setLoading(false);
     }, (err) => {
-      console.error("[useActivities] Firestore error, falling back to demo:", err);
-      setActivities(demoActivities);
+      console.error("[useActivities] Firestore error:", err);
+      setActivities([]);
       setLoading(false);
     });
 
     return unsub;
-  }, [isStrava, user]);
+  }, [user]);
 
   const loadMore = () => setDisplayCount((prev) => prev + 20);
   const hasMore = displayCount < activities.length;
@@ -59,22 +61,19 @@ export function useActivities() {
     activities: activities.slice(0, displayCount),
     totalCount: activities.length,
     loading,
-    isDemo: !isStrava,
     loadMore,
     hasMore,
   };
 }
 
 export function useWeeklyStats() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { totalCount } = useActivities();
-  const isStrava = !!user && !!profile?.stravaConnected;
 
-  // Separate subscription for stats (needs all activities)
   const [activities, setActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
-    if (!isStrava || !user) return;
+    if (!user) return;
 
     const q = query(
       collection(firestore, "activities"),
@@ -88,21 +87,18 @@ export function useWeeklyStats() {
     });
 
     return unsub;
-  }, [isStrava, user]);
+  }, [user]);
 
-  if (!isStrava) {
-    return {
-      weeklyStats: getDemoWeeklyStats("rider_1"),
-      thisWeek: getDemoThisWeekSummary("rider_1"),
-      totalCount: demoActivities.length,
-    };
+  const emptyWeeks: WeeklyStat[] = [];
+  const emptyThisWeek = { rides: 0, distance: 0, time: 0, elevation: 0 };
+
+  if (!user) {
+    return { weeklyStats: emptyWeeks, thisWeek: emptyThisWeek, totalCount: 0 };
   }
 
   const all = activities;
-
-  // Compute weekly stats from Firestore activities
   const now = new Date();
-  const weeks = [];
+  const weeks: WeeklyStat[] = [];
   for (let w = 11; w >= 0; w--) {
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - w * 7 - weekStart.getDay() + 1);

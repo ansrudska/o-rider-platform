@@ -7,7 +7,7 @@ const db = admin.firestore();
  * 팔로우 생성 시: followers 컬렉션에 역방향 추가 + 알림
  */
 export const onFollowCreate = onDocumentCreated(
-  "following/{userId}/{targetId}",
+  "following/{userId}/users/{targetId}",
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
@@ -51,7 +51,7 @@ export const onFollowCreate = onDocumentCreated(
  * 팔로우 삭제 시: followers 컬렉션에서 역방향 제거
  */
 export const onFollowDelete = onDocumentDeleted(
-  "following/{userId}/{targetId}",
+  "following/{userId}/users/{targetId}",
   async (event) => {
     const { userId, targetId } = event.params;
 

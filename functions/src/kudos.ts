@@ -7,7 +7,7 @@ const db = admin.firestore();
  * Kudos 생성 시: kudosCount 증가 + 알림 발송
  */
 export const onKudosCreate = onDocumentCreated(
-  "kudos/{activityId}/{userId}",
+  "activities/{activityId}/kudos/{userId}",
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
@@ -50,7 +50,7 @@ export const onKudosCreate = onDocumentCreated(
  * Kudos 삭제 시: kudosCount 감소
  */
 export const onKudosDelete = onDocumentDeleted(
-  "kudos/{activityId}/{userId}",
+  "activities/{activityId}/kudos/{userId}",
   async (event) => {
     const { activityId } = event.params;
 
