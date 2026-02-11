@@ -9,6 +9,7 @@ import AthletePage from "./pages/AthletePage";
 import ExplorePage from "./pages/ExplorePage";
 import StravaCallbackPage from "./pages/StravaCallbackPage";
 import SettingsPage from "./pages/SettingsPage";
+import MigrationPage from "./pages/MigrationPage";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/strava/callback" element={<StravaCallbackPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/migrate" element={<MigrationPage />} />
       </Route>
     </Routes>
   );

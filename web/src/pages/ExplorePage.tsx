@@ -1,46 +1,73 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { segments } from "../data/demo";
-import type { Segment } from "@shared/types";
+import { useCollection } from "../hooks/useFirestore";
 
-type Category = "all" | "climb" | "sprint" | "flat";
+interface SegmentData {
+  id: string;
+  name: string;
+  distance: number;
+  averageGrade: number;
+  maximumGrade: number;
+  elevationHigh: number;
+  elevationLow: number;
+  climbCategory: number; // Strava: 0=NC, 1=Cat4, 2=Cat3, 3=Cat2, 4=Cat1, 5=HC
+  city?: string;
+  state?: string;
+  source?: string;
+}
+
+type Category = "all" | "climb" | "flat";
 
 const CATEGORIES: { id: Category; label: string; icon: string }[] = [
   { id: "all", label: "전체", icon: "🗺" },
   { id: "climb", label: "힐클라임", icon: "⛰" },
-  { id: "sprint", label: "스프린트", icon: "⚡" },
   { id: "flat", label: "평지", icon: "➡️" },
 ];
 
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-const CLIMB_CATEGORY_COLORS: Record<string, string> = {
-  HC: "bg-red-600 text-white",
-  "1": "bg-red-500 text-white",
-  "2": "bg-orange-500 text-white",
-  "3": "bg-yellow-500 text-white",
-  "4": "bg-green-500 text-white",
+// Strava climbCategory number → display label
+const CLIMB_LABELS: Record<number, string> = {
+  5: "HC",
+  4: "Cat 1",
+  3: "Cat 2",
+  2: "Cat 3",
+  1: "Cat 4",
 };
 
+const CLIMB_COLORS: Record<number, string> = {
+  5: "bg-red-600 text-white",
+  4: "bg-red-500 text-white",
+  3: "bg-orange-500 text-white",
+  2: "bg-yellow-500 text-white",
+  1: "bg-green-500 text-white",
+};
+
+function deriveCategory(seg: SegmentData): "climb" | "flat" {
+  return seg.climbCategory > 0 ? "climb" : "flat";
+}
+
 export default function ExplorePage() {
+  const { data: segments, loading } = useCollection<SegmentData>("segments");
   const [category, setCategory] = useState<Category>("all");
   const [search, setSearch] = useState("");
 
-  const filtered = segments.filter((s) => {
-    if (category !== "all" && s.category !== category) return false;
-    if (search && !s.name.toLowerCase().includes(search.toLowerCase()))
-      return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return segments.filter((s) => {
+      if (category !== "all" && deriveCategory(s) !== category) return false;
+      if (search && !s.name.toLowerCase().includes(search.toLowerCase()))
+        return false;
+      return true;
+    });
+  }, [segments, category, search]);
 
-  // Sort by popularity
-  const sorted = [...filtered].sort(
-    (a, b) => b.totalEfforts - a.totalEfforts,
+  // Sort by elevation gain (descending) as a proxy for popularity
+  const sorted = useMemo(
+    () =>
+      [...filtered].sort(
+        (a, b) =>
+          (b.elevationHigh - b.elevationLow) -
+          (a.elevationHigh - a.elevationLow),
+      ),
+    [filtered],
   );
 
   return (
@@ -48,7 +75,7 @@ export default function ExplorePage() {
       <div>
         <h1 className="text-2xl font-bold">세그먼트 탐색</h1>
         <p className="text-gray-500 text-sm mt-1">
-          인기 세그먼트를 찾아보고 도전해보세요
+          세그먼트를 찾아보고 도전해보세요
         </p>
       </div>
 
@@ -93,98 +120,77 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Top segments */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">
-          인기 세그먼트 Top {sorted.length}
-        </h2>
-        <div className="space-y-3">
-          {sorted.map((segment, index) => (
-            <SegmentCard
-              key={segment.id}
-              segment={segment}
-              rank={index + 1}
-            />
-          ))}
+      {/* Segment list */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      </div>
-
-      {sorted.length === 0 && (
+      ) : sorted.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          조건에 맞는 세그먼트가 없습니다.
+          {segments.length === 0
+            ? "세그먼트가 없습니다. 활동을 복사하면 세그먼트가 자동으로 추가됩니다."
+            : "조건에 맞는 세그먼트가 없습니다."}
+        </div>
+      ) : (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">
+            세그먼트 ({sorted.length})
+          </h2>
+          <div className="space-y-3">
+            {sorted.map((segment) => (
+              <SegmentCard key={segment.id} segment={segment} />
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function SegmentCard({
-  segment,
-  rank,
-}: {
-  segment: Segment;
-  rank: number;
-}) {
+function SegmentCard({ segment }: { segment: SegmentData }) {
+  const elevGain = Math.max(0, segment.elevationHigh - segment.elevationLow);
+  const isClimb = segment.climbCategory > 0;
+  const climbLabel = CLIMB_LABELS[segment.climbCategory];
+  const climbColor = CLIMB_COLORS[segment.climbCategory];
+
   return (
     <Link
       to={`/segment/${segment.id}`}
       className="block bg-white rounded-lg border border-gray-200 p-4 hover:border-orange-300 transition-colors"
     >
       <div className="flex items-start gap-4">
-        {/* Rank */}
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500">
-          {rank}
-        </div>
-
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold">{segment.name}</h3>
-            {segment.climbCategory && (
-              <span
-                className={`px-2 py-0.5 text-xs font-bold rounded ${CLIMB_CATEGORY_COLORS[segment.climbCategory]}`}
-              >
-                Cat {segment.climbCategory}
+            {climbLabel && climbColor && (
+              <span className={`px-2 py-0.5 text-xs font-bold rounded ${climbColor}`}>
+                {climbLabel}
               </span>
             )}
             <span
               className={`px-2 py-0.5 text-xs rounded ${
-                segment.category === "climb"
+                isClimb
                   ? "bg-green-100 text-green-700"
-                  : segment.category === "sprint"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-blue-100 text-blue-700"
+                  : "bg-blue-100 text-blue-700"
               }`}
             >
-              {segment.category === "climb"
-                ? "힐클라임"
-                : segment.category === "sprint"
-                  ? "스프린트"
-                  : "평지"}
+              {isClimb ? "힐클라임" : "평지"}
             </span>
           </div>
-          <p className="text-sm text-gray-500 mt-0.5">{segment.description}</p>
+          {(segment.city || segment.state) && (
+            <p className="text-sm text-gray-500 mt-0.5">
+              {[segment.city, segment.state].filter(Boolean).join(", ")}
+            </p>
+          )}
 
           <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
             <span>📏 {(segment.distance / 1000).toFixed(2)}km</span>
-            <span>⛰ {segment.elevationGain}m</span>
+            <span>⛰ {Math.round(elevGain)}m</span>
             <span>📐 {segment.averageGrade.toFixed(1)}%</span>
-            <span>🏁 {segment.totalEfforts.toLocaleString()}회 도전</span>
+            {segment.maximumGrade > 0 && (
+              <span>📐 최대 {segment.maximumGrade.toFixed(1)}%</span>
+            )}
           </div>
-        </div>
-
-        {/* KOM time */}
-        <div className="flex-shrink-0 text-right">
-          {segment.kom && (
-            <div>
-              <div className="text-xs text-gray-500">KOM</div>
-              <div className="font-mono font-semibold text-orange-600">
-                {formatTime(segment.kom.time)}
-              </div>
-              <div className="text-xs text-gray-400">
-                {segment.kom.nickname}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </Link>

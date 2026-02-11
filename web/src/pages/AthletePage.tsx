@@ -7,8 +7,6 @@ import {
   riders,
   getActivitiesForUser,
   getWeeklyStats,
-  segmentEfforts,
-  segmentMap,
 } from "../data/demo";
 
 function formatHours(ms: number): string {
@@ -16,13 +14,6 @@ function formatHours(ms: number): string {
   const minutes = Math.floor((ms % 3600000) / 60000);
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
-}
-
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 export default function AthletePage() {
@@ -51,24 +42,6 @@ export default function AthletePage() {
     (s, a) => s + a.summary.elevationGain,
     0,
   );
-
-  // User PRs - best efforts per segment
-  const userEfforts = segmentEfforts.filter((e) => e.userId === userId);
-  const prs: { segmentId: string; segmentName: string; time: number; rank: number | null }[] = [];
-  for (const effort of userEfforts) {
-    const segId = findSegmentForEffort(effort.id);
-    if (segId) {
-      const seg = segmentMap[segId];
-      if (seg && !prs.some((p) => p.segmentId === segId)) {
-        prs.push({
-          segmentId: segId,
-          segmentName: seg.name,
-          time: effort.elapsedTime,
-          rank: effort.rank,
-        });
-      }
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -135,34 +108,6 @@ export default function AthletePage() {
         <WeeklyChart data={weeklyStats} dataKey="distance" height={160} />
       </div>
 
-      {/* PRs */}
-      {prs.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 font-semibold text-sm">
-            개인 기록 (PR)
-          </div>
-          <div className="divide-y divide-gray-100">
-            {prs.map((pr) => (
-              <a
-                key={pr.segmentId}
-                href={`/segment/${pr.segmentId}`}
-                className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-              >
-                <div>
-                  <div className="font-medium text-sm">{pr.segmentName}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">
-                    {pr.rank === 1 ? "🏆 KOM" : `#${pr.rank}`}
-                  </div>
-                </div>
-                <div className="font-mono font-semibold">
-                  {formatTime(pr.time)}
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Activity feed */}
       <div>
         <h2 className="text-lg font-semibold mb-3">최근 활동</h2>
@@ -184,20 +129,4 @@ export default function AthletePage() {
       </div>
     </div>
   );
-}
-
-// Helper to find which segment an effort belongs to
-const SEGMENT_EFFORT_MAP: Record<string, string[]> = {
-  seg_namsan: ["eff_01", "eff_02", "eff_03", "eff_04"],
-  seg_bukak: ["eff_05", "eff_06", "eff_07", "eff_08"],
-  seg_hangang: ["eff_09", "eff_10", "eff_11", "eff_12"],
-  seg_paldang: ["eff_13", "eff_14", "eff_15", "eff_16"],
-  seg_bukansan: ["eff_17", "eff_18", "eff_19", "eff_20"],
-};
-
-function findSegmentForEffort(effortId: string): string | undefined {
-  for (const [segId, ids] of Object.entries(SEGMENT_EFFORT_MAP)) {
-    if (ids.includes(effortId)) return segId;
-  }
-  return undefined;
 }

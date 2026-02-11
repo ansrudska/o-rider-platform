@@ -64,6 +64,8 @@ interface StravaActivity {
   weighted_average_watts?: number;
   average_cadence?: number;
   kilojoules?: number;
+  total_photo_count?: number;
+  achievement_count?: number;
   map?: { summary_polyline: string };
 }
 
@@ -96,10 +98,10 @@ function convertStravaActivity(sa: StravaActivity, uid: string, nickname: string
     thumbnailTrack: sa.map?.summary_polyline ?? "",
     groupId: null,
     groupRideId: null,
-    photoCount: 0,
+    photoCount: sa.total_photo_count ?? 0,
     kudosCount: 0,
     commentCount: 0,
-    segmentEffortCount: 0,
+    segmentEffortCount: sa.achievement_count ?? 0,
     description: sa.name,
     visibility: "everyone" as const,
     gpxPath: null,
@@ -168,27 +170,49 @@ export const stravaExchangeToken = onCall(
 );
 
 export const stravaImportActivities = onCall(
-  { secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET] },
+  { secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET], timeoutSeconds: 300 },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
     const uid = request.auth.uid;
-    const { page = 1, perPage = 200 } = request.data as {
+    const { page = 1, perPage = 200, after, migrationMode } = request.data as {
       page?: number;
       perPage?: number;
+      after?: number;
+      migrationMode?: boolean;
     };
     const accessToken = await getValidAccessToken(uid);
 
-    console.log(`[stravaImport] uid=${uid} page=${page} perPage=${perPage}`);
+    let url = `https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=${perPage}`;
+    if (after) url += `&after=${after}`;
 
-    const resp = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=${perPage}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
+    console.log(`[stravaImport] uid=${uid} page=${page} perPage=${perPage} after=${after ?? "none"} migration=${migrationMode ?? false}`);
+
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
 
     if (!resp.ok) {
       const errText = await resp.text();
       console.error(`[stravaImport] Strava API failed: ${resp.status} ${errText}`);
+
+      // Rate limited — return retry info instead of failing
+      if (resp.status === 429) {
+        const rateLimit = parseRateLimitHeaders(resp);
+        const check = checkRateLimit(rateLimit);
+        console.log(`[stravaImport] Rate limited: 15min=${rateLimit.usage15min}/${rateLimit.limit15min} daily=${rateLimit.usageDaily}/${rateLimit.limitDaily}`);
+        return {
+          imported: 0, skipped: 0, rides: 0, totalActivities: 0,
+          hasMore: true, photos: 0, achievements: 0,
+          rateLimited: true,
+          retryAfterSeconds: check.retryAfterSeconds || 60,
+        };
+      }
+
+      if (migrationMode) {
+        await db.doc(`users/${uid}`).set(
+          { migration: { status: "FAILED", progress: { updatedAt: Date.now() } } },
+          { merge: true },
+        );
+      }
       throw new HttpsError("internal", `Strava API failed: ${resp.status}`);
     }
 
@@ -196,7 +220,7 @@ export const stravaImportActivities = onCall(
     console.log(`[stravaImport] Page ${page}: ${stravaActivities.length} activities returned from API`);
 
     if (stravaActivities.length === 0) {
-      return { imported: 0, rides: 0, totalActivities: 0, hasMore: false };
+      return { imported: 0, skipped: 0, rides: 0, totalActivities: 0, hasMore: false, photos: 0, achievements: 0 };
     }
 
     // Broader cycling filter
@@ -221,23 +245,57 @@ export const stravaImportActivities = onCall(
 
     const batch = db.batch();
     let imported = 0;
+    let skipped = 0;
+    let photos = 0;
+    let achievements = 0;
 
     for (const sa of rides) {
       const docId = `strava_${sa.id}`;
       const docRef = db.doc(`activities/${docId}`);
       const existing = await docRef.get();
-      if (existing.exists) continue;
+      if (existing.exists) {
+        skipped++;
+        continue;
+      }
 
       batch.set(docRef, convertStravaActivity(sa, uid, nickname));
       imported++;
+      photos += sa.total_photo_count ?? 0;
+      achievements += sa.achievement_count ?? 0;
     }
 
     if (imported > 0) await batch.commit();
 
     const hasMore = stravaActivities.length >= perPage;
-    console.log(`[stravaImport] Page ${page} done: ${imported} imported, ${rides.length} rides, hasMore=${hasMore}`);
 
-    return { imported, rides: rides.length, totalActivities: stravaActivities.length, hasMore };
+    // Update migration progress in user document
+    if (migrationMode) {
+      await db.doc(`users/${uid}`).set(
+        {
+          migration: {
+            progress: {
+              importedActivities: admin.firestore.FieldValue.increment(imported),
+              skippedActivities: admin.firestore.FieldValue.increment(skipped),
+              currentPage: page,
+              updatedAt: Date.now(),
+            },
+          },
+        },
+        { merge: true },
+      );
+    }
+
+    // Parse rate limit from response headers
+    const rateLimit = parseRateLimitHeaders(resp);
+    const rateLimitCheck = checkRateLimit(rateLimit);
+
+    console.log(`[stravaImport] Page ${page} done: ${imported} imported, ${skipped} skipped, ${rides.length} rides, hasMore=${hasMore} rateLimit=${rateLimit.usage15min}/${rateLimit.limit15min}`);
+
+    return {
+      imported, skipped, rides: rides.length, totalActivities: stravaActivities.length, hasMore, photos, achievements,
+      rateLimited: rateLimitCheck.paused,
+      retryAfterSeconds: rateLimitCheck.retryAfterSeconds,
+    };
   },
 );
 
@@ -475,6 +533,522 @@ export const stravaGetActivityStreams = onCall(
   },
 );
 
+// ── Rate Limit Helpers ───────────────────────────────────────────────
+
+interface RateLimitInfo {
+  usage15min: number;
+  limit15min: number;
+  usageDaily: number;
+  limitDaily: number;
+}
+
+function parseRateLimitHeaders(resp: Response): RateLimitInfo {
+  // Strava headers: "X-RateLimit-Limit: 100,1000" and "X-RateLimit-Usage: 42,350"
+  const limitHeader = resp.headers.get("X-RateLimit-Limit") ?? "100,1000";
+  const usageHeader = resp.headers.get("X-RateLimit-Usage") ?? "0,0";
+
+  const [limit15min, limitDaily] = limitHeader.split(",").map(Number);
+  const [usage15min, usageDaily] = usageHeader.split(",").map(Number);
+
+  return {
+    usage15min: usage15min || 0,
+    limit15min: limit15min || 100,
+    usageDaily: usageDaily || 0,
+    limitDaily: limitDaily || 1000,
+  };
+}
+
+function checkRateLimit(info: RateLimitInfo): { paused: boolean; retryAfterSeconds: number } {
+  if (info.usageDaily >= info.limitDaily - 5) {
+    return { paused: true, retryAfterSeconds: 3600 };
+  }
+  if (info.usage15min >= info.limit15min - 5) {
+    return { paused: true, retryAfterSeconds: 60 };
+  }
+  return { paused: false, retryAfterSeconds: 0 };
+}
+
+// ── Batch Stream Fetcher ─────────────────────────────────────────────
+
+interface StravaSegmentEffort {
+  id: number;
+  name: string;
+  elapsed_time: number;
+  moving_time: number;
+  distance: number;
+  start_index: number;
+  end_index: number;
+  average_watts?: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  average_cadence?: number;
+  pr_rank?: number | null;
+  kom_rank?: number | null;
+  achievements?: { type_id: number; type: string; rank: number }[];
+  segment: {
+    id: number;
+    name: string;
+    distance: number;
+    average_grade: number;
+    maximum_grade: number;
+    elevation_high: number;
+    elevation_low: number;
+    climb_category: number;
+    city?: string;
+    state?: string;
+    starred: boolean;
+  };
+}
+
+interface StravaPhoto {
+  unique_id: string;
+  urls: Record<string, string>;
+  caption?: string;
+  location?: [number, number];
+  created_at?: string;
+}
+
+async function fetchAndCacheStreams(
+  stravaActivityId: number,
+  uid: string,
+  nickname: string,
+  accessToken: string,
+  includeSegments: boolean,
+  includePhotos: boolean,
+): Promise<{ resp: Response; apiCalls: number }> {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  let apiCalls = 0;
+
+  // Always fetch streams
+  const streamsResp = await fetch(
+    `https://www.strava.com/api/v3/activities/${stravaActivityId}/streams?keys=latlng,altitude,heartrate,watts,cadence,velocity_smooth,time,distance&key_by_type=true`,
+    { headers },
+  );
+  apiCalls++;
+
+  if (!streamsResp.ok) {
+    return { resp: streamsResp, apiCalls };
+  }
+
+  const streams = await streamsResp.json();
+  const streamData: Record<string, unknown> = { userId: uid };
+
+  if (Array.isArray(streams)) {
+    for (const stream of streams) {
+      const s = stream as { type: string; data: unknown };
+      streamData[s.type] = s.data;
+    }
+  } else {
+    for (const [key, value] of Object.entries(streams)) {
+      streamData[key] = (value as { data: unknown }).data;
+    }
+  }
+
+  // Optionally fetch detail (for segments) and photos
+  let detailResp: Response | null = null;
+  let photosResp: Response | null = null;
+
+  if (includeSegments && includePhotos) {
+    const [dr, pr] = await Promise.all([
+      fetch(`https://www.strava.com/api/v3/activities/${stravaActivityId}?include_all_efforts=true`, { headers }),
+      fetch(`https://www.strava.com/api/v3/activities/${stravaActivityId}/photos?size=600&photo_sources=true`, { headers }),
+    ]);
+    detailResp = dr;
+    photosResp = pr;
+    apiCalls += 2;
+  } else if (includeSegments) {
+    detailResp = await fetch(`https://www.strava.com/api/v3/activities/${stravaActivityId}?include_all_efforts=true`, { headers });
+    apiCalls++;
+  } else if (includePhotos) {
+    photosResp = await fetch(`https://www.strava.com/api/v3/activities/${stravaActivityId}/photos?size=600&photo_sources=true`, { headers });
+    apiCalls++;
+  }
+
+  // Process segments
+  if (detailResp?.ok) {
+    const detail = await detailResp.json();
+    const efforts = (detail.segment_efforts ?? []) as StravaSegmentEffort[];
+    streamData.segment_efforts = efforts.map((e) => ({
+      id: e.id,
+      name: e.name,
+      elapsedTime: e.elapsed_time * 1000,
+      movingTime: e.moving_time * 1000,
+      distance: e.distance,
+      startIndex: e.start_index,
+      endIndex: e.end_index,
+      averageWatts: e.average_watts ?? null,
+      averageHeartrate: e.average_heartrate ?? null,
+      maxHeartrate: e.max_heartrate ?? null,
+      averageCadence: e.average_cadence ?? null,
+      prRank: e.pr_rank ?? null,
+      komRank: e.kom_rank ?? null,
+      achievements: e.achievements ?? [],
+      segment: {
+        id: e.segment.id,
+        name: e.segment.name,
+        distance: e.segment.distance,
+        averageGrade: e.segment.average_grade,
+        maximumGrade: e.segment.maximum_grade,
+        elevationHigh: e.segment.elevation_high,
+        elevationLow: e.segment.elevation_low,
+        climbCategory: e.segment.climb_category,
+        starred: e.segment.starred,
+      },
+    }));
+
+    // Save segments & efforts to DB
+    const latlngArr = streamData.latlng as [number, number][] | undefined;
+    const batch = db.batch();
+    for (const e of efforts) {
+      const seg = e.segment;
+      const segDocId = `strava_${seg.id}`;
+      batch.set(db.doc(`segments/${segDocId}`), {
+        name: seg.name,
+        distance: seg.distance,
+        averageGrade: seg.average_grade,
+        maximumGrade: seg.maximum_grade,
+        elevationHigh: seg.elevation_high,
+        elevationLow: seg.elevation_low,
+        climbCategory: seg.climb_category,
+        city: seg.city ?? null,
+        state: seg.state ?? null,
+        startLatlng: latlngArr?.[e.start_index] ?? null,
+        endLatlng: latlngArr?.[e.end_index] ?? null,
+        source: "strava",
+        stravaSegmentId: seg.id,
+        updatedAt: Date.now(),
+      }, { merge: true });
+
+      const effortDocId = `strava_${e.id}`;
+      const startDate = detail.start_date
+        ? new Date(detail.start_date as string).getTime()
+        : Date.now();
+      batch.set(db.doc(`segment_efforts/${segDocId}/efforts/${effortDocId}`), {
+        segmentId: segDocId,
+        activityId: `strava_${stravaActivityId}`,
+        userId: uid,
+        nickname,
+        elapsedTime: e.elapsed_time * 1000,
+        movingTime: e.moving_time * 1000,
+        distance: e.distance,
+        averageSpeed: e.distance > 0 && e.moving_time > 0 ? (e.distance / e.moving_time) * 3.6 : 0,
+        averageWatts: e.average_watts ?? null,
+        averageHeartrate: e.average_heartrate ?? null,
+        maxHeartrate: e.max_heartrate ?? null,
+        averageCadence: e.average_cadence ?? null,
+        prRank: e.pr_rank ?? null,
+        komRank: e.kom_rank ?? null,
+        startDate,
+        source: "strava",
+        stravaEffortId: e.id,
+        createdAt: Date.now(),
+      }, { merge: true });
+    }
+    if (efforts.length > 0) await batch.commit();
+  }
+
+  // Process photos
+  if (photosResp?.ok) {
+    const photos = (await photosResp.json()) as StravaPhoto[];
+    if (photos.length > 0) {
+      streamData.photos = photos.map((p) => ({
+        id: p.unique_id,
+        url: p.urls?.["600"] ?? p.urls?.["100"] ?? Object.values(p.urls ?? {})[0] ?? null,
+        caption: p.caption ?? null,
+        location: p.location ?? null,
+      }));
+    }
+  }
+
+  // Ensure cache keys exist so stravaGetActivityStreams doesn't invalidate
+  if (!("segment_efforts" in streamData)) streamData.segment_efforts = [];
+  if (!("photos" in streamData)) streamData.photos = [];
+
+  // Cache as JSON string
+  const cacheDocId = `strava_${stravaActivityId}`;
+  const jsonStr = JSON.stringify(streamData);
+  if (jsonStr.length < 1_000_000) {
+    await db.doc(`activity_streams/${cacheDocId}`).set({ userId: uid, json: jsonStr });
+  }
+
+  // Update activity doc with actual photo/segment counts
+  const photoCount = Array.isArray(streamData.photos) ? (streamData.photos as unknown[]).length : 0;
+  const segmentCount = Array.isArray(streamData.segment_efforts) ? (streamData.segment_efforts as unknown[]).length : 0;
+  if (photoCount > 0 || segmentCount > 0) {
+    await db.doc(`activities/${cacheDocId}`).set(
+      { photoCount, segmentEffortCount: segmentCount },
+      { merge: true },
+    );
+  }
+
+  return { resp: streamsResp, apiCalls };
+}
+
+export const stravaBatchFetchStreams = onCall(
+  { secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET], timeoutSeconds: 300 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+    const uid = request.auth.uid;
+    const { batchSize = 10, includePhotos = false, includeSegments = false } = request.data as {
+      batchSize?: number;
+      includePhotos?: boolean;
+      includeSegments?: boolean;
+    };
+
+    const accessToken = await getValidAccessToken(uid);
+
+    // Get user nickname
+    const userDoc = await db.doc(`users/${uid}`).get();
+    const nickname = userDoc.data()?.nickname ?? "Rider";
+
+    // Query all strava activities for this user
+    const activitiesSnap = await db
+      .collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "strava")
+      .get();
+
+    const allActivityIds = activitiesSnap.docs
+      .map((doc) => doc.data().stravaActivityId as number)
+      .filter(Boolean);
+
+    // Query cached streams for this user
+    const cachedSnap = await db
+      .collection("activity_streams")
+      .where("userId", "==", uid)
+      .select()
+      .get();
+    const cachedIds = new Set(cachedSnap.docs.map((doc) => doc.id));
+
+    // Find activities without cached streams
+    const uncachedIds = allActivityIds.filter((id) => !cachedIds.has(`strava_${id}`));
+
+    const totalStreams = allActivityIds.length;
+    const alreadyFetched = allActivityIds.length - uncachedIds.length;
+
+    // Update total count in migration progress
+    await db.doc(`users/${uid}`).set(
+      {
+        migration: {
+          progress: {
+            phase: "streams",
+            totalStreams,
+            fetchedStreams: alreadyFetched,
+            updatedAt: Date.now(),
+          },
+        },
+      },
+      { merge: true },
+    );
+
+    if (uncachedIds.length === 0) {
+      return { fetched: 0, remaining: 0, done: true, rateLimit: { paused: false, retryAfterSeconds: 0 } };
+    }
+
+    // Process batch
+    const batch = uncachedIds.slice(0, Math.min(batchSize, uncachedIds.length));
+    let fetched = 0;
+    let failed = 0;
+    let lastRateLimit: RateLimitInfo | null = null;
+
+    for (const stravaId of batch) {
+      try {
+        const result = await fetchAndCacheStreams(stravaId, uid, nickname, accessToken, includeSegments, includePhotos);
+        lastRateLimit = parseRateLimitHeaders(result.resp);
+
+        if (result.resp.ok) {
+          fetched++;
+        } else {
+          failed++;
+          console.error(`[batchStreams] Failed activity ${stravaId}: ${result.resp.status}`);
+        }
+
+        // Check rate limit after each activity
+        const rateLimitCheck = checkRateLimit(lastRateLimit);
+        if (rateLimitCheck.paused) {
+          console.log(`[batchStreams] Rate limit reached after ${fetched} activities: 15min=${lastRateLimit.usage15min}/${lastRateLimit.limit15min} daily=${lastRateLimit.usageDaily}/${lastRateLimit.limitDaily}`);
+
+          // Update progress before pausing
+          await db.doc(`users/${uid}`).set(
+            {
+              migration: {
+                progress: {
+                  fetchedStreams: alreadyFetched + fetched,
+                  failedStreams: admin.firestore.FieldValue.increment(failed),
+                  updatedAt: Date.now(),
+                },
+              },
+            },
+            { merge: true },
+          );
+
+          const remaining = uncachedIds.length - fetched - failed;
+          return {
+            fetched,
+            failed,
+            remaining,
+            done: false,
+            rateLimit: { paused: true, retryAfterSeconds: rateLimitCheck.retryAfterSeconds },
+          };
+        }
+      } catch (e) {
+        failed++;
+        console.error(`[batchStreams] Error fetching activity ${stravaId}:`, e);
+      }
+    }
+
+    // Update progress
+    await db.doc(`users/${uid}`).set(
+      {
+        migration: {
+          progress: {
+            fetchedStreams: alreadyFetched + fetched,
+            failedStreams: admin.firestore.FieldValue.increment(failed),
+            updatedAt: Date.now(),
+          },
+        },
+      },
+      { merge: true },
+    );
+
+    const remaining = uncachedIds.length - fetched - failed;
+    console.log(`[batchStreams] uid=${uid} fetched=${fetched} failed=${failed} remaining=${remaining}`);
+
+    return {
+      fetched,
+      failed,
+      remaining,
+      done: remaining <= 0,
+      rateLimit: lastRateLimit
+        ? { paused: false, retryAfterSeconds: 0, usage15min: lastRateLimit.usage15min, limit15min: lastRateLimit.limit15min }
+        : { paused: false, retryAfterSeconds: 0 },
+    };
+  },
+);
+
+export const stravaMigrationStart = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+  const { scope } = request.data as {
+    scope: { period: string; includePhotos: boolean; includeSegments: boolean };
+  };
+
+  if (!scope?.period) throw new HttpsError("invalid-argument", "scope is required");
+
+  await db.doc(`users/${uid}`).set(
+    {
+      migration: {
+        status: "RUNNING",
+        scope,
+        progress: {
+          totalActivities: 0,
+          importedActivities: 0,
+          skippedActivities: 0,
+          currentPage: 0,
+          totalPages: 0,
+          phase: "activities",
+          totalStreams: 0,
+          fetchedStreams: 0,
+          failedStreams: 0,
+          startedAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        report: null,
+      },
+    },
+    { merge: true },
+  );
+
+  console.log(`[migration] Started for uid=${uid} scope=${JSON.stringify(scope)}`);
+  return { success: true };
+});
+
+export const stravaMigrationComplete = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+
+  // Query all activities for this user from Strava
+  const activitiesSnap = await db
+    .collection("activities")
+    .where("userId", "==", uid)
+    .where("source", "==", "strava")
+    .get();
+
+  let totalDistance = 0;
+  let totalTime = 0;
+  let totalElevation = 0;
+  let totalCalories = 0;
+  let totalPhotos = 0;
+  let totalSegmentEfforts = 0;
+  let earliestActivity = Infinity;
+  let latestActivity = 0;
+  const routeCounts: Record<string, { distance: number; count: number }> = {};
+
+  for (const doc of activitiesSnap.docs) {
+    const data = doc.data();
+    totalDistance += data.summary?.distance ?? 0;
+    totalTime += data.summary?.ridingTimeMillis ?? 0;
+    totalElevation += data.summary?.elevationGain ?? 0;
+    totalCalories += data.summary?.calories ?? 0;
+    totalPhotos += data.photoCount ?? 0;
+    totalSegmentEfforts += data.segmentEffortCount ?? 0;
+
+    const startTime = data.startTime ?? data.createdAt ?? 0;
+    if (startTime < earliestActivity) earliestActivity = startTime;
+    if (startTime > latestActivity) latestActivity = startTime;
+
+    const name = (data.description ?? "").trim();
+    if (name) {
+      if (!routeCounts[name]) routeCounts[name] = { distance: data.summary?.distance ?? 0, count: 0 };
+      routeCounts[name].count++;
+    }
+  }
+
+  // Count streams (GPS data fetched)
+  const streamsSnap = await db
+    .collection("activity_streams")
+    .where("userId", "==", uid)
+    .select()
+    .get();
+  const totalStreams = streamsSnap.size;
+
+  const topRoutes = Object.entries(routeCounts)
+    .sort(([, a], [, b]) => b.count - a.count)
+    .slice(0, 3)
+    .map(([name, { distance, count }]) => ({ name, distance, count }));
+
+  const report = {
+    totalActivities: activitiesSnap.size,
+    totalDistance,
+    totalTime,
+    totalElevation,
+    totalCalories,
+    totalPhotos,
+    totalSegmentEfforts,
+    totalStreams,
+    earliestActivity: earliestActivity === Infinity ? 0 : earliestActivity,
+    latestActivity,
+    topRoutes,
+  };
+
+  await db.doc(`users/${uid}`).set(
+    {
+      migration: {
+        status: "DONE",
+        report,
+        progress: { updatedAt: Date.now() },
+      },
+    },
+    { merge: true },
+  );
+
+  console.log(`[migration] Completed for uid=${uid}: ${report.totalActivities} activities, ${Math.round(report.totalDistance / 1000)}km`);
+  return report;
+});
+
 export const stravaDisconnect = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
@@ -488,3 +1062,60 @@ export const stravaDisconnect = onCall(async (request) => {
 
   return { success: true };
 });
+
+export const stravaDeleteUserData = onCall(
+  { timeoutSeconds: 300 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+    const uid = request.auth.uid;
+    let deletedActivities = 0;
+    let deletedStreams = 0;
+
+    // Delete activities (batch of 500)
+    const activitiesSnap = await db
+      .collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "strava")
+      .select()
+      .get();
+
+    const activityDocs = activitiesSnap.docs;
+    for (let i = 0; i < activityDocs.length; i += 500) {
+      const batch = db.batch();
+      const chunk = activityDocs.slice(i, i + 500);
+      for (const doc of chunk) {
+        batch.delete(doc.ref);
+      }
+      await batch.commit();
+      deletedActivities += chunk.length;
+    }
+
+    // Delete activity_streams
+    const streamsSnap = await db
+      .collection("activity_streams")
+      .where("userId", "==", uid)
+      .select()
+      .get();
+
+    const streamDocs = streamsSnap.docs;
+    for (let i = 0; i < streamDocs.length; i += 500) {
+      const batch = db.batch();
+      const chunk = streamDocs.slice(i, i + 500);
+      for (const doc of chunk) {
+        batch.delete(doc.ref);
+      }
+      await batch.commit();
+      deletedStreams += chunk.length;
+    }
+
+    // Reset migration state
+    await db.doc(`users/${uid}`).set(
+      { migration: admin.firestore.FieldValue.delete() },
+      { merge: true },
+    );
+
+    console.log(`[deleteUserData] uid=${uid} activities=${deletedActivities} streams=${deletedStreams}`);
+    return { deletedActivities, deletedStreams };
+  },
+);

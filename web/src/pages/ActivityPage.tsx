@@ -104,7 +104,7 @@ export default function ActivityPage() {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [streams, setStreams] = useState<ActivityStreams | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(true);
-  const [loadingStreams, setLoadingStreams] = useState(false);
+  const [showStreamSpinner, setShowStreamSpinner] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -130,15 +130,19 @@ export default function ActivityPage() {
   }, [activityId, user]);
 
   useEffect(() => {
-    if (!activity || !user || !profile?.stravaConnected) return;
+    if (!activity || !user || !profile?.stravaConnected || streams) return;
 
     const stravaId = (activity as Activity & { stravaActivityId?: number }).stravaActivityId;
     if (!stravaId) return;
 
-    setLoadingStreams(true);
+    // Delay showing spinner to avoid flash when cached data returns quickly
+    const timer = setTimeout(() => setShowStreamSpinner(true), 500);
     getStreams(stravaId).then((data) => {
       setStreams(data as unknown as ActivityStreams);
-    }).catch(() => {}).finally(() => setLoadingStreams(false));
+    }).catch(() => {}).finally(() => {
+      clearTimeout(timer);
+      setShowStreamSpinner(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, user, profile?.stravaConnected]);
 
@@ -386,7 +390,7 @@ export default function ActivityPage() {
       </div>
 
       {/* Combined Elevation + Performance Chart */}
-      {loadingStreams && isStrava && (
+      {showStreamSpinner && isStrava && (
         <div className="bg-white rounded-lg border border-gray-200 p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">고도 & 성능 분석</h3>
           <div className="h-[280px] flex items-center justify-center">
@@ -395,7 +399,7 @@ export default function ActivityPage() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Strava에서 GPS 스트림 데이터를 가져오는 중...
+              GPS 데이터 로딩 중...
             </div>
           </div>
         </div>

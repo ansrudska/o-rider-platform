@@ -1,8 +1,6 @@
 import type {
   Activity,
   ActivitySummary,
-  Segment,
-  SegmentEffort,
   GroupRide,
   GroupRideParticipant,
   Comment,
@@ -600,162 +598,6 @@ export const activities: Activity[] = [
   },
 ];
 
-// ── Segments (5) ────────────────────────────────────────────────────
-
-export const segments: Segment[] = [
-  {
-    id: "seg_namsan",
-    name: "남산 힐클라임",
-    description: "남산 도서관 → 남산타워 정상",
-    creatorId: "rider_1",
-    source: "official",
-    status: "active",
-    startLat: 37.5512,
-    startLon: 126.9882,
-    endLat: 37.5509,
-    endLon: 126.9882,
-    polyline: "",
-    distance: 2800,
-    elevationGain: 210,
-    averageGrade: 7.5,
-    geoHash: "wydm9",
-    category: "climb",
-    climbCategory: "4",
-    totalEfforts: 1842,
-    starCount: 256,
-    kom: { time: 378000, userId: "rider_4", nickname: "최준혁", recordedAt: ts(14) },
-    qom: { time: 456000, userId: "rider_3", nickname: "박서연", recordedAt: ts(21) },
-  },
-  {
-    id: "seg_bukak",
-    name: "북악 스카이웨이",
-    description: "성북동 → 북악스카이웨이 정상",
-    creatorId: "rider_3",
-    source: "official",
-    status: "active",
-    startLat: 37.5929,
-    startLon: 126.9864,
-    endLat: 37.6012,
-    endLon: 126.9651,
-    polyline: "",
-    distance: 4500,
-    elevationGain: 340,
-    averageGrade: 7.6,
-    geoHash: "wydm9",
-    category: "climb",
-    climbCategory: "3",
-    totalEfforts: 2156,
-    starCount: 384,
-    kom: { time: 582000, userId: "rider_1", nickname: "김민수", recordedAt: ts(5) },
-    qom: { time: 714000, userId: "rider_3", nickname: "박서연", recordedAt: ts(7) },
-  },
-  {
-    id: "seg_hangang",
-    name: "한강 잠실대교 → 광나루",
-    description: "잠실대교 남단 → 광나루 자전거공원",
-    creatorId: "rider_2",
-    source: "official",
-    status: "active",
-    startLat: 37.5175,
-    startLon: 127.0854,
-    endLat: 37.5448,
-    endLon: 127.1215,
-    polyline: "",
-    distance: 8200,
-    elevationGain: 15,
-    averageGrade: 0.2,
-    geoHash: "wydm6",
-    category: "flat",
-    climbCategory: null,
-    totalEfforts: 5230,
-    starCount: 512,
-    kom: { time: 624000, userId: "rider_4", nickname: "최준혁", recordedAt: ts(3) },
-    qom: { time: 738000, userId: "rider_2", nickname: "이지원", recordedAt: ts(6) },
-  },
-  {
-    id: "seg_paldang",
-    name: "팔당댐 스프린트",
-    description: "팔당대교 → 팔당댐 입구",
-    creatorId: "rider_4",
-    source: "user",
-    status: "active",
-    startLat: 37.5218,
-    startLon: 127.2815,
-    endLat: 37.5185,
-    endLon: 127.3012,
-    polyline: "",
-    distance: 3200,
-    elevationGain: 25,
-    averageGrade: 0.8,
-    geoHash: "wydjz",
-    category: "sprint",
-    climbCategory: null,
-    totalEfforts: 3120,
-    starCount: 198,
-    kom: { time: 258000, userId: "rider_4", nickname: "최준혁", recordedAt: ts(1) },
-    qom: { time: 312000, userId: "rider_2", nickname: "이지원", recordedAt: ts(8) },
-  },
-  {
-    id: "seg_bukansan",
-    name: "북한산 우이령길",
-    description: "우이동 → 우이령 고개",
-    creatorId: "rider_3",
-    source: "official",
-    status: "active",
-    startLat: 37.6572,
-    startLon: 127.0125,
-    endLat: 37.6685,
-    endLon: 126.9882,
-    polyline: "",
-    distance: 5800,
-    elevationGain: 480,
-    averageGrade: 8.3,
-    geoHash: "wydmc",
-    category: "climb",
-    climbCategory: "2",
-    totalEfforts: 890,
-    starCount: 142,
-    kom: { time: 852000, userId: "rider_1", nickname: "김민수", recordedAt: ts(10) },
-    qom: { time: 1020000, userId: "rider_3", nickname: "박서연", recordedAt: ts(12) },
-  },
-];
-
-export const segmentMap = Object.fromEntries(segments.map((s) => [s.id, s]));
-
-// ── Segment Efforts (20) ────────────────────────────────────────────
-
-export const segmentEfforts: SegmentEffort[] = [
-  // 남산 (seg_namsan)
-  { id: "eff_01", userId: "rider_4", nickname: "최준혁", activityId: "act_04", elapsedTime: 378000, averageSpeed: 26.7, averageHeartRate: 175, averagePower: 310, averageCadence: 78, recordedAt: ts(14), rank: 1 },
-  { id: "eff_02", userId: "rider_1", nickname: "김민수", activityId: "act_01", elapsedTime: 402000, averageSpeed: 25.1, averageHeartRate: 172, averagePower: 285, averageCadence: 82, recordedAt: ts(0), rank: 2 },
-  { id: "eff_03", userId: "rider_2", nickname: "이지원", activityId: "act_02", elapsedTime: 420000, averageSpeed: 24.0, averageHeartRate: 168, averagePower: 260, averageCadence: 80, recordedAt: ts(2), rank: 3 },
-  { id: "eff_04", userId: "rider_3", nickname: "박서연", activityId: "act_09", elapsedTime: 456000, averageSpeed: 22.1, averageHeartRate: 178, averagePower: 225, averageCadence: 75, recordedAt: ts(4), rank: 4 },
-
-  // 북악 (seg_bukak)
-  { id: "eff_05", userId: "rider_1", nickname: "김민수", activityId: "act_01", elapsedTime: 582000, averageSpeed: 27.8, averageHeartRate: 170, averagePower: 295, averageCadence: 80, recordedAt: ts(5), rank: 1 },
-  { id: "eff_06", userId: "rider_4", nickname: "최준혁", activityId: "act_04", elapsedTime: 594000, averageSpeed: 27.3, averageHeartRate: 165, averagePower: 305, averageCadence: 82, recordedAt: ts(1), rank: 2 },
-  { id: "eff_07", userId: "rider_3", nickname: "박서연", activityId: "act_03", elapsedTime: 714000, averageSpeed: 22.7, averageHeartRate: 180, averagePower: 230, averageCadence: 72, recordedAt: ts(7), rank: 3 },
-  { id: "eff_08", userId: "rider_5", nickname: "정하늘", activityId: "act_05", elapsedTime: 750000, averageSpeed: 21.6, averageHeartRate: 160, averagePower: 210, averageCadence: 76, recordedAt: ts(8), rank: 4 },
-
-  // 한강 (seg_hangang)
-  { id: "eff_09", userId: "rider_4", nickname: "최준혁", activityId: "act_04", elapsedTime: 624000, averageSpeed: 47.3, averageHeartRate: 158, averagePower: 280, averageCadence: 95, recordedAt: ts(3), rank: 1 },
-  { id: "eff_10", userId: "rider_2", nickname: "이지원", activityId: "act_02", elapsedTime: 648000, averageSpeed: 45.6, averageHeartRate: 155, averagePower: 255, averageCadence: 92, recordedAt: ts(0), rank: 2 },
-  { id: "eff_11", userId: "rider_1", nickname: "김민수", activityId: "act_06", elapsedTime: 660000, averageSpeed: 44.7, averageHeartRate: 160, averagePower: 270, averageCadence: 90, recordedAt: ts(3), rank: 3 },
-  { id: "eff_12", userId: "rider_5", nickname: "정하늘", activityId: "act_05", elapsedTime: 702000, averageSpeed: 42.1, averageHeartRate: 148, averagePower: 235, averageCadence: 88, recordedAt: ts(5), rank: 4 },
-
-  // 팔당댐 스프린트 (seg_paldang)
-  { id: "eff_13", userId: "rider_4", nickname: "최준혁", activityId: "act_08", elapsedTime: 258000, averageSpeed: 44.7, averageHeartRate: 170, averagePower: 350, averageCadence: 100, recordedAt: ts(1), rank: 1 },
-  { id: "eff_14", userId: "rider_2", nickname: "이지원", activityId: "act_07", elapsedTime: 276000, averageSpeed: 41.7, averageHeartRate: 165, averagePower: 300, averageCadence: 98, recordedAt: ts(3), rank: 2 },
-  { id: "eff_15", userId: "rider_1", nickname: "김민수", activityId: "act_06", elapsedTime: 282000, averageSpeed: 40.9, averageHeartRate: 168, averagePower: 310, averageCadence: 96, recordedAt: ts(3), rank: 3 },
-  { id: "eff_16", userId: "rider_5", nickname: "정하늘", activityId: "act_11", elapsedTime: 318000, averageSpeed: 36.2, averageHeartRate: 155, averagePower: 260, averageCadence: 92, recordedAt: ts(5), rank: 4 },
-
-  // 북한산 (seg_bukansan)
-  { id: "eff_17", userId: "rider_1", nickname: "김민수", activityId: "act_15", elapsedTime: 852000, averageSpeed: 24.5, averageHeartRate: 172, averagePower: 280, averageCadence: 76, recordedAt: ts(10), rank: 1 },
-  { id: "eff_18", userId: "rider_4", nickname: "최준혁", activityId: "act_13", elapsedTime: 870000, averageSpeed: 24.0, averageHeartRate: 168, averagePower: 295, averageCadence: 78, recordedAt: ts(7), rank: 2 },
-  { id: "eff_19", userId: "rider_3", nickname: "박서연", activityId: "act_14", elapsedTime: 1020000, averageSpeed: 20.5, averageHeartRate: 182, averagePower: 220, averageCadence: 70, recordedAt: ts(12), rank: 3 },
-  { id: "eff_20", userId: "rider_5", nickname: "정하늘", activityId: "act_11", elapsedTime: 1080000, averageSpeed: 19.3, averageHeartRate: 158, averagePower: 200, averageCadence: 72, recordedAt: ts(8), rank: 4 },
-];
-
 // ── Group Rides (3) ─────────────────────────────────────────────────
 
 function makeParticipant(
@@ -1006,17 +848,6 @@ export function getActivitiesForUser(userId: string): Activity[] {
   return activities.filter((a) => a.userId === userId);
 }
 
-export function getEffortsForSegment(segmentId: string): SegmentEffort[] {
-  const segmentEffortMap: Record<string, string[]> = {
-    seg_namsan: ["eff_01", "eff_02", "eff_03", "eff_04"],
-    seg_bukak: ["eff_05", "eff_06", "eff_07", "eff_08"],
-    seg_hangang: ["eff_09", "eff_10", "eff_11", "eff_12"],
-    seg_paldang: ["eff_13", "eff_14", "eff_15", "eff_16"],
-    seg_bukansan: ["eff_17", "eff_18", "eff_19", "eff_20"],
-  };
-  const ids = segmentEffortMap[segmentId] ?? [];
-  return segmentEfforts.filter((e) => ids.includes(e.id));
-}
 
 export function getGroupRidesForGroup(groupId: string): GroupRide[] {
   return groupRides.filter((r) => r.groupId === groupId);

@@ -11,5 +11,9 @@ export {
   stravaExchangeToken,
   stravaImportActivities,
   stravaGetActivityStreams,
+  stravaBatchFetchStreams,
   stravaDisconnect,
+  stravaDeleteUserData,
+  stravaMigrationStart,
+  stravaMigrationComplete,
 } from "./strava";

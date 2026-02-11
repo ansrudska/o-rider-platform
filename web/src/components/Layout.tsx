@@ -3,7 +3,7 @@ import { Outlet, Link, NavLink } from "react-router-dom";
 import Avatar from "./Avatar";
 import { useAuth } from "../contexts/AuthContext";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: "/", label: "대시보드" },
   { to: "/explore", label: "탐색" },
   { to: "/group/group_1", label: "그룹" },
@@ -13,6 +13,15 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { user, profile, loading, signInWithGoogle, logout } = useAuth();
+
+  const migrationStatus = profile?.migration?.status;
+  const showMigrate = user && profile && profile.stravaConnected;
+  const migrationLabel = migrationStatus === "RUNNING" ? "복사 진행중" : "복사";
+
+  const NAV_ITEMS = [
+    ...BASE_NAV_ITEMS,
+    ...(showMigrate ? [{ to: "/migrate", label: migrationLabel }] : []),
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">

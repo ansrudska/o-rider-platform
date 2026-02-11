@@ -168,6 +168,55 @@ export interface FollowRelation {
   createdAt: number;
 }
 
+// Migration
+export type MigrationStatus = "NOT_STARTED" | "RUNNING" | "PARTIAL_DONE" | "DONE" | "FAILED";
+export type MigrationPeriod = "recent_90" | "recent_180" | "all";
+
+export interface MigrationScope {
+  period: MigrationPeriod;
+  includePhotos: boolean;
+  includeSegments: boolean;
+}
+
+export type MigrationPhase = "activities" | "streams" | "complete";
+
+export interface MigrationProgress {
+  totalActivities: number;
+  importedActivities: number;
+  skippedActivities: number;
+  currentPage: number;
+  totalPages: number;
+  phase: MigrationPhase;
+  totalStreams: number;
+  fetchedStreams: number;
+  failedStreams: number;
+  startedAt: number;
+  updatedAt: number;
+}
+
+export interface MigrationReport {
+  totalActivities: number;
+  totalDistance: number;
+  totalTime: number;
+  totalElevation: number;
+  totalCalories: number;
+  totalPhotos: number;
+  totalSegmentEfforts: number;
+  totalStreams: number;
+  earliestActivity: number;
+  latestActivity: number;
+  topRoutes: { name: string; distance: number; count: number }[];
+  // Legacy compat
+  totalSegmentPRs?: number;
+}
+
+export interface MigrationState {
+  status: MigrationStatus;
+  scope: MigrationScope | null;
+  progress: MigrationProgress | null;
+  report: MigrationReport | null;
+}
+
 // User Profile
 export interface UserProfile {
   nickname: string;
@@ -177,6 +226,7 @@ export interface UserProfile {
   stravaAthleteId: number | null;
   stravaNickname: string | null;
   createdAt?: number;
+  migration?: MigrationState;
 }
 
 // Activity Streams (Strava GPS data)
