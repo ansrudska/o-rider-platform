@@ -140,9 +140,9 @@ async function matchGroupRide(
 
   if (matchedActivityIds.length === 0) return;
 
-  // 새 그룹 라이드 생성 또는 기존에 합류
+  // 새 그룹 라이드 ID 생성 또는 기존 ID 재사용
   if (!matchedGroupRideId) {
-    matchedGroupRideId = db.collection("group_rides").doc().id;
+    matchedGroupRideId = db.collection("activities").doc().id;
 
     // 매칭된 기존 활동들에도 groupRideId 부여
     const batch = db.batch();
@@ -154,77 +154,11 @@ async function matchGroupRide(
     await batch.commit();
   }
 
-  const participant = {
-    activityId,
-    nickname: activity.nickname,
-    profileImage: activity.profileImage || null,
-    distance: activity.summary?.distance || 0,
-    ridingTimeMillis: activity.summary?.ridingTimeMillis || 0,
-    averageSpeed: activity.summary?.averageSpeed || 0,
-    averageHeartRate: activity.summary?.averageHeartRate || null,
-    averagePower: activity.summary?.averagePower || null,
-    averageCadence: activity.summary?.averageCadence || null,
-  };
-
   // 현재 activity에 groupRideId 저장
   await db
     .collection("activities")
     .doc(activityId)
     .update({ groupRideId: matchedGroupRideId });
-
-  // group_rides 문서 업데이트
-  const groupRideRef = db.collection("group_rides").doc(matchedGroupRideId);
-  const groupRideSnap = await groupRideRef.get();
-
-  if (groupRideSnap.exists) {
-    await groupRideRef.update({
-      [`participants.${activity.userId}`]: participant,
-      participantCount: admin.firestore.FieldValue.increment(1),
-      totalDistance: admin.firestore.FieldValue.increment(
-        activity.summary?.distance || 0
-      ),
-      startTime: Math.min(startTime, groupRideSnap.data()!.startTime),
-      endTime: Math.max(endTime, groupRideSnap.data()!.endTime),
-    });
-  } else {
-    // 새 그룹 라이드 — 매칭된 활동들의 참가자도 추가
-    const participants: Record<string, unknown> = {
-      [activity.userId]: participant,
-    };
-
-    for (const matchedId of matchedActivityIds) {
-      const matchedSnap = await db.collection("activities").doc(matchedId).get();
-      if (!matchedSnap.exists) continue;
-      const matched = matchedSnap.data()!;
-      participants[matched.userId] = {
-        activityId: matchedId,
-        nickname: matched.nickname,
-        profileImage: matched.profileImage || null,
-        distance: matched.summary?.distance || 0,
-        ridingTimeMillis: matched.summary?.ridingTimeMillis || 0,
-        averageSpeed: matched.summary?.averageSpeed || 0,
-        averageHeartRate: matched.summary?.averageHeartRate || null,
-        averagePower: matched.summary?.averagePower || null,
-        averageCadence: matched.summary?.averageCadence || null,
-      };
-    }
-
-    const allStarts = [startTime, ...matchedActivityIds.map(() => startTime)];
-    const allEnds = [endTime, ...matchedActivityIds.map(() => endTime)];
-
-    await groupRideRef.set({
-      groupId: activity.groupId || null,
-      startTime: Math.min(...allStarts),
-      endTime: Math.max(...allEnds),
-      participantCount: Object.keys(participants).length,
-      totalDistance: Object.values(participants).reduce(
-        (sum: number, p) => sum + ((p as { distance: number }).distance || 0),
-        0
-      ),
-      participants,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
 
   console.log(
     `[groupRide] Matched activity ${activityId} with ${matchedActivityIds.length} others → ${matchedGroupRideId}`

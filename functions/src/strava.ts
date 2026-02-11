@@ -1,4 +1,4 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 
@@ -103,7 +103,7 @@ function convertStravaActivity(sa: StravaActivity, uid: string, nickname: string
     commentCount: 0,
     segmentEffortCount: sa.achievement_count ?? 0,
     description: sa.name,
-    visibility: "everyone" as const,
+    visibility: "everyone" as string,
     gpxPath: null,
     source: "strava" as const,
     stravaActivityId: sa.id,
@@ -239,9 +239,11 @@ export const stravaImportActivities = onCall(
       console.log(`[stravaImport] Page ${page}: skipped types: ${otherTypes.join(", ")}`);
     }
 
-    // Get user nickname
+    // Get user profile
     const userDoc = await db.doc(`users/${uid}`).get();
-    const nickname = userDoc.data()?.nickname ?? "Rider";
+    const userData = userDoc.data();
+    const nickname = userData?.nickname ?? "Rider";
+    const defaultVisibility = userData?.defaultVisibility ?? "everyone";
 
     const batch = db.batch();
     let imported = 0;
@@ -258,7 +260,9 @@ export const stravaImportActivities = onCall(
         continue;
       }
 
-      batch.set(docRef, convertStravaActivity(sa, uid, nickname));
+      const activityData = convertStravaActivity(sa, uid, nickname);
+      activityData.visibility = defaultVisibility;
+      batch.set(docRef, activityData);
       imported++;
       photos += sa.total_photo_count ?? 0;
       achievements += sa.achievement_count ?? 0;
@@ -1117,5 +1121,121 @@ export const stravaDeleteUserData = onCall(
 
     console.log(`[deleteUserData] uid=${uid} activities=${deletedActivities} streams=${deletedStreams}`);
     return { deletedActivities, deletedStreams };
+  },
+);
+
+// ── Strava Webhook ──────────────────────────────────────────────────
+
+const WEBHOOK_VERIFY_TOKEN = "orider-strava-webhook-2026";
+const CYCLING_TYPES = ["Ride", "VirtualRide", "EBikeRide", "Handcycle", "Velomobile"];
+
+export const stravaWebhook = onRequest(
+  { secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET] },
+  async (req, res) => {
+    // GET: Strava subscription validation
+    if (req.method === "GET") {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+
+      if (mode === "subscribe" && token === WEBHOOK_VERIFY_TOKEN) {
+        console.log("[webhook] Subscription validated");
+        res.json({ "hub.challenge": challenge });
+      } else {
+        res.status(403).send("Forbidden");
+      }
+      return;
+    }
+
+    // POST: Strava event
+    if (req.method === "POST") {
+      const event = req.body as {
+        object_type: string;
+        object_id: number;
+        aspect_type: string;
+        owner_id: number;
+        subscription_id: number;
+        event_time: number;
+      };
+
+      console.log(`[webhook] ${event.aspect_type} ${event.object_type} ${event.object_id} owner=${event.owner_id}`);
+
+      // Only process activity events
+      if (event.object_type !== "activity") {
+        res.status(200).send("OK");
+        return;
+      }
+
+      // Find user by stravaAthleteId
+      const usersSnap = await db
+        .collection("users")
+        .where("stravaAthleteId", "==", event.owner_id)
+        .limit(1)
+        .get();
+
+      if (usersSnap.empty) {
+        console.log(`[webhook] No user found for athlete ${event.owner_id}`);
+        res.status(200).send("OK");
+        return;
+      }
+
+      const userDoc = usersSnap.docs[0];
+      const uid = userDoc.id;
+      const userData = userDoc.data();
+      const docId = `strava_${event.object_id}`;
+
+      // Handle delete
+      if (event.aspect_type === "delete") {
+        await db.doc(`activities/${docId}`).delete();
+        await db.doc(`activity_streams/${docId}`).delete();
+        console.log(`[webhook] Deleted activity ${docId}`);
+        res.status(200).send("OK");
+        return;
+      }
+
+      // Handle create/update: fetch activity from Strava
+      let accessToken: string;
+      try {
+        accessToken = await getValidAccessToken(uid);
+      } catch (err) {
+        console.error(`[webhook] Token error for ${uid}:`, err);
+        res.status(200).send("OK");
+        return;
+      }
+
+      const resp = await fetch(
+        `https://www.strava.com/api/v3/activities/${event.object_id}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+
+      if (!resp.ok) {
+        console.error(`[webhook] Strava API error: ${resp.status}`);
+        res.status(200).send("OK");
+        return;
+      }
+
+      const sa: StravaActivity = await resp.json();
+
+      // Only process cycling activities
+      if (!CYCLING_TYPES.includes(sa.type)) {
+        console.log(`[webhook] Skipping non-cycling type: ${sa.type}`);
+        res.status(200).send("OK");
+        return;
+      }
+
+      const nickname = userData.nickname ?? "Rider";
+      const defaultVisibility = userData.defaultVisibility ?? "everyone";
+      const activityData = convertStravaActivity(sa, uid, nickname);
+      activityData.visibility = defaultVisibility;
+      activityData.profileImage = userData.photoURL ?? null;
+
+      await db.doc(`activities/${docId}`).set(activityData);
+      console.log(`[webhook] ${event.aspect_type} activity ${docId} for user ${uid} (${sa.name})`);
+
+      res.status(200).send("OK");
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
   },
 );

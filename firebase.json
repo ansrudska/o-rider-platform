@@ -28,6 +28,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/strava/webhook",
+        "function": "stravaWebhook"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

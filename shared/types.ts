@@ -218,6 +218,8 @@ export interface MigrationState {
 }
 
 // User Profile
+export type Visibility = 'everyone' | 'friends' | 'private';
+
 export interface UserProfile {
   nickname: string;
   email: string | null;
@@ -225,6 +227,7 @@ export interface UserProfile {
   stravaConnected: boolean;
   stravaAthleteId: number | null;
   stravaNickname: string | null;
+  defaultVisibility?: Visibility;
   createdAt?: number;
   migration?: MigrationState;
 }

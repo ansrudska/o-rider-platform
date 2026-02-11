@@ -6,7 +6,7 @@ export { onActivityCreate } from "./activity";
 export { onKudosCreate, onKudosDelete } from "./kudos";
 export { onCommentCreate } from "./comment";
 export { onFollowCreate, onFollowDelete } from "./follow";
-export { ensureUserProfile } from "./auth";
+export { ensureUserProfile, updateDefaultVisibility } from "./auth";
 export {
   stravaExchangeToken,
   stravaImportActivities,
@@ -16,4 +16,5 @@ export {
   stravaDeleteUserData,
   stravaMigrationStart,
   stravaMigrationComplete,
+  stravaWebhook,
 } from "./strava";

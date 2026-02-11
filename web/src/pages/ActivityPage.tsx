@@ -12,9 +12,9 @@ import {
   kudos,
   generateElevationProfile,
 } from "../data/demo";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { firestore } from "../services/firebase";
-import type { Activity, GroupRide } from "@shared/types";
+import type { Activity, Visibility } from "@shared/types";
 import type { ActivityStreams } from "@shared/types";
 
 function formatDuration(ms: number): string {
@@ -106,7 +106,7 @@ export default function ActivityPage() {
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [showStreamSpinner, setShowStreamSpinner] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [groupRide, setGroupRide] = useState<GroupRide | null>(null);
+  const [coRiders, setCoRiders] = useState<Activity[]>([]);
 
   useEffect(() => {
     if (!activityId) return;
@@ -147,16 +147,22 @@ export default function ActivityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, user, profile?.stravaConnected]);
 
-  // Fetch group ride (co-riders) when activity has groupRideId
+  // Fetch co-riders: activities with the same groupRideId
   useEffect(() => {
     if (!activity?.groupRideId) return;
 
-    getDoc(doc(firestore, "group_rides", activity.groupRideId)).then((snap) => {
-      if (snap.exists()) {
-        setGroupRide({ id: snap.id, ...snap.data() } as GroupRide);
-      }
+    const q = query(
+      collection(firestore, "activities"),
+      where("groupRideId", "==", activity.groupRideId),
+    );
+    getDocs(q).then((snap) => {
+      setCoRiders(
+        snap.docs
+          .filter((d) => d.id !== activity.id)
+          .map((d) => ({ id: d.id, ...d.data() }) as Activity),
+      );
     }).catch(() => {});
-  }, [activity?.groupRideId]);
+  }, [activity?.groupRideId, activity?.id]);
 
   const handleElevHover = useCallback((index: number | null) => {
     setHoverIndex(index);
@@ -304,6 +310,30 @@ export default function ActivityPage() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900">{activity.description || "라이딩"}</h1>
             <div className="text-sm text-gray-500 mt-1">{formatFullDate(activity.startTime)}</div>
+            {user?.uid === activity.userId && !isDemo && (
+              <div className="flex items-center gap-1.5 mt-2">
+                {([
+                  { value: "everyone", label: "전체 공개", icon: "🌐" },
+                  { value: "friends", label: "팔로워", icon: "👥" },
+                  { value: "private", label: "비공개", icon: "🔒" },
+                ] as { value: Visibility; label: string; icon: string }[]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      updateDoc(doc(firestore, "activities", activity.id), { visibility: opt.value });
+                      setActivity({ ...activity, visibility: opt.value });
+                    }}
+                    className={`px-2 py-1 text-xs rounded border transition-colors ${
+                      activity.visibility === opt.value
+                        ? "bg-orange-50 border-orange-300 text-orange-700 font-medium"
+                        : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                    }`}
+                  >
+                    {opt.icon} {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -402,43 +432,41 @@ export default function ActivityPage() {
       </div>
 
       {/* Co-riders (함께 탄 라이더) */}
-      {groupRide && Object.keys(groupRide.participants).length > 1 && (
+      {coRiders.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
             <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            함께 탄 라이더 ({Object.keys(groupRide.participants).length}명)
+            함께 탄 라이더 ({coRiders.length}명)
           </h3>
           <div className="space-y-2">
-            {Object.entries(groupRide.participants)
-              .filter(([uid]) => uid !== activity.userId)
-              .map(([uid, p]) => (
-                <Link
-                  key={uid}
-                  to={`/activity/${p.activityId}`}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Avatar
-                    name={p.nickname}
-                    imageUrl={p.profileImage}
-                    size="sm"
-                    userId={uid}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{p.nickname}</div>
-                    <div className="text-xs text-gray-500 flex items-center gap-2">
-                      <span>{(p.distance / 1000).toFixed(1)} km</span>
-                      <span>{p.averageSpeed.toFixed(1)} km/h</span>
-                      {p.averageHeartRate != null && <span>{p.averageHeartRate} bpm</span>}
-                      {p.averagePower != null && <span>{p.averagePower} W</span>}
-                    </div>
+            {coRiders.map((r) => (
+              <Link
+                key={r.id}
+                to={`/activity/${r.id}`}
+                className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Avatar
+                  name={r.nickname}
+                  imageUrl={r.profileImage}
+                  size="sm"
+                  userId={r.userId}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{r.nickname}</div>
+                  <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <span>{(r.summary.distance / 1000).toFixed(1)} km</span>
+                    <span>{r.summary.averageSpeed.toFixed(1)} km/h</span>
+                    {r.summary.averageHeartRate != null && <span>{r.summary.averageHeartRate} bpm</span>}
+                    {r.summary.averagePower != null && <span>{r.summary.averagePower} W</span>}
                   </div>
-                  <div className="text-xs text-gray-400">
-                    {formatDuration(p.ridingTimeMillis)}
-                  </div>
-                </Link>
-              ))}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {formatDuration(r.summary.ridingTimeMillis)}
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       )}

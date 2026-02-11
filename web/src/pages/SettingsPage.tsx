@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useStrava } from "../hooks/useStrava";
+import type { Visibility } from "@shared/types";
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
   const { connectStrava, disconnectStrava, deleteUserData, loading, error } = useStrava();
   const [deleteResult, setDeleteResult] = useState<{ deletedActivities: number; deletedStreams: number } | null>(null);
+  const currentVisibility = profile?.defaultVisibility ?? "everyone";
+  const [selectedVisibility, setSelectedVisibility] = useState<Visibility | null>(null);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
+  const [visibilityResult, setVisibilityResult] = useState<string | null>(null);
 
   if (!user) {
     return (
@@ -60,6 +67,65 @@ export default function SettingsPage() {
             <div className="font-semibold">{profile?.nickname ?? user.displayName}</div>
             <div className="text-sm text-gray-500">{user.email}</div>
           </div>
+        </div>
+      </div>
+
+      {/* Visibility section */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold mb-4">공개 범위</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          새로 가져오는 활동의 기본 공개 범위를 설정합니다.
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-2">
+            {([
+              { value: "everyone", label: "전체 공개" },
+              { value: "friends", label: "팔로워만" },
+              { value: "private", label: "비공개" },
+            ] as { value: Visibility; label: string }[]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setSelectedVisibility(opt.value);
+                  setVisibilityResult(null);
+                }}
+                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
+                  (selectedVisibility ?? currentVisibility) === opt.value
+                    ? "bg-orange-50 border-orange-300 text-orange-700 font-medium"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {selectedVisibility && selectedVisibility !== currentVisibility && (
+            <button
+              onClick={async () => {
+                setVisibilitySaving(true);
+                setVisibilityResult(null);
+                try {
+                  const fn = httpsCallable<{ visibility: string }, { updated: number }>(functions, "updateDefaultVisibility");
+                  const result = await fn({ visibility: selectedVisibility });
+                  setVisibilityResult(`저장 완료 (활동 ${result.data.updated}개 업데이트)`);
+                  setSelectedVisibility(null);
+                } catch {
+                  setVisibilityResult("저장 실패");
+                } finally {
+                  setVisibilitySaving(false);
+                }
+              }}
+              disabled={visibilitySaving}
+              className="px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors font-medium"
+            >
+              {visibilitySaving ? "적용 중..." : "적용"}
+            </button>
+          )}
+          {visibilityResult && (
+            <span className={`text-sm ${visibilityResult.includes("실패") ? "text-red-600" : "text-green-600"}`}>
+              {visibilityResult}
+            </span>
+          )}
         </div>
       </div>
 
