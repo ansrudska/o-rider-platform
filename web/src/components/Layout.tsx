@@ -6,7 +6,6 @@ import { useAuth } from "../contexts/AuthContext";
 const BASE_NAV_ITEMS = [
   { to: "/", label: "대시보드" },
   { to: "/explore", label: "탐색" },
-  { to: "/group/group_1", label: "그룹" },
 ];
 
 export default function Layout() {
