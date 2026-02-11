@@ -18,3 +18,4 @@ export {
   stravaMigrationComplete,
   stravaWebhook,
 } from "./strava";
+export { scheduledFirestoreBackup } from "./backup";

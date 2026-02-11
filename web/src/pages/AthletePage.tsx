@@ -170,7 +170,7 @@ export default function AthletePage() {
         <div>
           <h1 className="text-2xl font-bold">
             {nickname}
-            {friendCode && <span className="text-sm font-normal text-gray-400 ml-2">({friendCode})</span>}
+            {friendCode && <span className="text-sm font-normal text-blue-500 ml-2">({friendCode})</span>}
           </h1>
           <div className="flex gap-4 mt-2 text-sm text-gray-600">
             <span><strong className="text-gray-900">{followerCount}</strong> 팔로워</span>

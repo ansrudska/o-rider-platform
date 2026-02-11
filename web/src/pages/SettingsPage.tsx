@@ -147,7 +147,7 @@ export default function SettingsPage() {
             {friendCode && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-sm text-gray-500">친구 코드</span>
-                <span className="font-mono font-semibold text-sm text-orange-600 bg-orange-50 px-2 py-0.5 rounded">{friendCode}</span>
+                <span className="font-mono font-semibold text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{friendCode}</span>
                 <button
                   onClick={() => { navigator.clipboard.writeText(friendCode); }}
                   className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
