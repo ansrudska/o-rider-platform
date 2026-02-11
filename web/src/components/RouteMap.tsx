@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngTuple } from "leaflet";
 import L from "leaflet";
-import { decodePolyline } from "../utils/polyline";
+import { decodeTrack } from "../utils/polyline";
 
 export interface PhotoMarker {
   id: string;
@@ -62,7 +62,7 @@ export default function RouteMap({
       return latlng as LatLngTuple[];
     }
     if (polyline && polyline.length > 0) {
-      return decodePolyline(polyline) as LatLngTuple[];
+      return decodeTrack(polyline) as LatLngTuple[];
     }
     return [];
   }, [polyline, latlng]);

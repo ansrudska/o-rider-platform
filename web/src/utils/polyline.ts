@@ -10,7 +10,7 @@ export function decodeTrack(str: string): [number, number][] {
     const points: [number, number][] = [];
     for (const pair of str.split(";")) {
       const parts = pair.split(",");
-      if (parts.length === 2) {
+      if (parts.length === 2 && parts[0] && parts[1]) {
         const lat = parseFloat(parts[0]);
         const lng = parseFloat(parts[1]);
         if (!isNaN(lat) && !isNaN(lng)) {
