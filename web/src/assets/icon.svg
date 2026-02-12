@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Background -->
+  <rect width="200" height="200" rx="40" fill="#26A69A"/>
+
+  <!-- Back mountain -->
+  <path d="M0,145 L40,100 L70,118 L100,78 L130,100 L160,68 L200,95 L200,200 L0,200 Z" fill="#1A7F7A"/>
+  <!-- Back mountain snow -->
+  <path d="M100,78 L108,93 L92,93 Z" fill="#4DB6AC"/>
+  <path d="M160,68 L169,85 L151,85 Z" fill="#4DB6AC"/>
+
+  <!-- Front mountain -->
+  <path d="M0,168 L35,135 L65,152 L100,115 L135,140 L170,108 L200,135 L200,200 L0,200 Z" fill="#00695C"/>
+  <!-- Front mountain snow -->
+  <path d="M100,115 L108,130 L92,130 Z" fill="#26A69A"/>
+  <path d="M170,108 L178,123 L162,123 Z" fill="#26A69A"/>
+
+  <!-- Road -->
+  <path d="M0,180 Q50,170 100,180 Q150,190 200,177" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- MR shadow -->
+  <g opacity="0.3" stroke="#00796B" stroke-width="20" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32,152 L32,57"/>
+    <path d="M32,57 L64,102 L97,57"/>
+    <path d="M97,57 L97,152"/>
+    <path d="M97,57 L132,57 Q160,57 160,84 Q160,110 132,110 L97,110"/>
+    <path d="M127,110 L167,152"/>
+  </g>
+
+  <!-- MR main -->
+  <g stroke="#FFFFFF" stroke-width="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M30,150 L30,55"/>
+    <path d="M30,55 L62,100 L95,55"/>
+    <path d="M95,55 L95,150"/>
+    <path d="M95,55 L130,55 Q158,55 158,82 Q158,108 130,108 L95,108"/>
+    <path d="M125,108 L165,150"/>
+  </g>
+</svg>

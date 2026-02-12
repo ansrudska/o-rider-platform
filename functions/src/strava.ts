@@ -764,9 +764,10 @@ async function fetchAndCacheStreams(
     }
   }
 
-  // Ensure cache keys exist so stravaGetActivityStreams doesn't invalidate
-  if (!("segment_efforts" in streamData)) streamData.segment_efforts = [];
-  if (!("photos" in streamData)) streamData.photos = [];
+  // Only set default keys if they were actually fetched.
+  // If not fetched, leave keys absent so stravaGetActivityStreams re-fetches.
+  if (includeSegments && !("segment_efforts" in streamData)) streamData.segment_efforts = [];
+  if (includePhotos && !("photos" in streamData)) streamData.photos = [];
 
   // Cache as JSON string
   const cacheDocId = `strava_${stravaActivityId}`;
@@ -1073,26 +1074,29 @@ export const stravaDeleteUserData = onCall(
     if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
     const uid = request.auth.uid;
+    const { streamsOnly = false } = (request.data ?? {}) as { streamsOnly?: boolean };
     let deletedActivities = 0;
     let deletedStreams = 0;
 
-    // Delete activities (batch of 500)
-    const activitiesSnap = await db
-      .collection("activities")
-      .where("userId", "==", uid)
-      .where("source", "==", "strava")
-      .select()
-      .get();
+    // Delete activities (batch of 500) — skip if streamsOnly
+    if (!streamsOnly) {
+      const activitiesSnap = await db
+        .collection("activities")
+        .where("userId", "==", uid)
+        .where("source", "==", "strava")
+        .select()
+        .get();
 
-    const activityDocs = activitiesSnap.docs;
-    for (let i = 0; i < activityDocs.length; i += 500) {
-      const batch = db.batch();
-      const chunk = activityDocs.slice(i, i + 500);
-      for (const doc of chunk) {
-        batch.delete(doc.ref);
+      const activityDocs = activitiesSnap.docs;
+      for (let i = 0; i < activityDocs.length; i += 500) {
+        const batch = db.batch();
+        const chunk = activityDocs.slice(i, i + 500);
+        for (const doc of chunk) {
+          batch.delete(doc.ref);
+        }
+        await batch.commit();
+        deletedActivities += chunk.length;
       }
-      await batch.commit();
-      deletedActivities += chunk.length;
     }
 
     // Delete activity_streams
@@ -1114,12 +1118,14 @@ export const stravaDeleteUserData = onCall(
     }
 
     // Reset migration state
-    await db.doc(`users/${uid}`).set(
-      { migration: admin.firestore.FieldValue.delete() },
-      { merge: true },
-    );
+    if (!streamsOnly) {
+      await db.doc(`users/${uid}`).set(
+        { migration: admin.firestore.FieldValue.delete() },
+        { merge: true },
+      );
+    }
 
-    console.log(`[deleteUserData] uid=${uid} activities=${deletedActivities} streams=${deletedStreams}`);
+    console.log(`[deleteUserData] uid=${uid} streamsOnly=${streamsOnly} activities=${deletedActivities} streams=${deletedStreams}`);
     return { deletedActivities, deletedStreams };
   },
 );

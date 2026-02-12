@@ -262,12 +262,12 @@ export function useStrava() {
     }
   };
 
-  const deleteUserData = async () => {
+  const deleteUserData = async (streamsOnly = false) => {
     setLoading(true);
     setError(null);
     try {
       const fn = httpsCallable(functions, "stravaDeleteUserData", { timeout: 300_000 });
-      const result = await fn();
+      const result = await fn({ streamsOnly });
       return result.data as { deletedActivities: number; deletedStreams: number };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Delete failed";

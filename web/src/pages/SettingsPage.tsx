@@ -6,11 +6,13 @@ import { ref, get } from "firebase/database";
 import { firestore, database, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useStrava } from "../hooks/useStrava";
+import { useExport } from "../hooks/useExport";
 import type { Visibility } from "@shared/types";
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
   const { connectStrava, disconnectStrava, deleteUserData, loading, error } = useStrava();
+  const { exportData, loading: exportLoading, error: exportError, progress: exportProgress } = useExport();
   const [deleteResult, setDeleteResult] = useState<{ deletedActivities: number; deletedStreams: number } | null>(null);
   const currentVisibility = profile?.defaultVisibility ?? "everyone";
   const [selectedVisibility, setSelectedVisibility] = useState<Visibility | null>(null);
@@ -83,7 +85,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold">설정</h1>
 
       {/* Profile section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
         <h2 className="text-lg font-semibold mb-4">프로필</h2>
         <div className="flex items-center gap-4">
           {user.photoURL ? (
@@ -164,7 +166,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Visibility section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
         <h2 className="text-lg font-semibold mb-4">공개 범위</h2>
         <p className="text-sm text-gray-500 mb-3">
           새로 가져오는 활동의 기본 공개 범위를 설정합니다.
@@ -222,8 +224,65 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Data export section */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-2">데이터 내보내기</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          모든 라이딩 기록, 사진, 댓글, 소셜 데이터를 ZIP 파일로 내보냅니다.
+        </p>
+
+        <button
+          onClick={exportData}
+          disabled={exportLoading}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors font-medium"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          {exportLoading ? "내보내는 중..." : "ZIP으로 내보내기"}
+        </button>
+
+        {exportProgress && (
+          <div className="mt-4">
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-orange-500 h-2.5 rounded-full transition-all duration-300"
+                style={{
+                  width: `${(() => {
+                    const weights = { activities: 5, streams: 25, social: 15, photos: 45, zip: 10 };
+                    const phases = ["activities", "streams", "social", "photos", "zip"] as const;
+                    let pct = 0;
+                    for (const p of phases) {
+                      if (p === exportProgress.phase) {
+                        pct += exportProgress.total > 0
+                          ? weights[p] * (exportProgress.current / exportProgress.total)
+                          : 0;
+                        break;
+                      }
+                      pct += weights[p];
+                    }
+                    return Math.min(100, Math.round(pct));
+                  })()}%`,
+                }}
+              />
+            </div>
+            <p className="text-sm text-gray-600 mt-1.5">{exportProgress.label}</p>
+          </div>
+        )}
+
+        {exportError && (
+          <div className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
+            {exportError}
+          </div>
+        )}
+
+        <div className="mt-4 text-xs text-gray-400">
+          포함 항목: GPX 트랙, 요약 CSV, 댓글, 좋아요, 사진, 세그먼트 PR, 팔로잉/팔로워
+        </div>
+      </div>
+
       {/* Strava section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Strava 연동</h2>
           {profile?.stravaConnected && (
@@ -253,7 +312,21 @@ export default function SettingsPage() {
                 </svg>
                 {profile?.migration?.status === "DONE" ? "복사 결과 보기" : "스트라바 복사하기"}
               </Link>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={async () => {
+                    if (!window.confirm("GPS/사진 캐시를 초기화합니다. 활동 상세 조회 시 Strava에서 다시 가져옵니다.")) return;
+                    try {
+                      setDeleteResult(null);
+                      const result = await deleteUserData(true);
+                      setDeleteResult({ deletedActivities: 0, deletedStreams: result.deletedStreams });
+                    } catch { /* error in hook */ }
+                  }}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 disabled:opacity-50 transition-colors"
+                >
+                  {loading ? "처리 중..." : "스트림 캐시 초기화"}
+                </button>
                 <button
                   onClick={handleDeleteData}
                   disabled={loading}

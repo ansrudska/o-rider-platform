@@ -7,6 +7,7 @@ import { firestore } from "../services/firebase";
 import Avatar from "./Avatar";
 import { useAuth } from "../contexts/AuthContext";
 import type { Notification } from "@shared/types";
+import iconSvg from "../assets/icon.svg";
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -109,9 +110,7 @@ export default function Layout() {
               to="/"
               className="flex items-center gap-2 font-bold text-lg"
             >
-              <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white text-sm font-black">
-                MR
-              </div>
+              <img src={iconSvg} alt="O-Rider" className="w-8 h-8 rounded-lg" />
               <span className="text-orange-600 hidden sm:inline">O-Rider</span>
             </Link>
 
@@ -370,7 +369,7 @@ export default function Layout() {
         )}
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 relative z-0">
+      <main className="max-w-7xl mx-auto px-4 py-6 relative z-0 animate-page-in">
         <Outlet />
       </main>
 

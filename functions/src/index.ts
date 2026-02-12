@@ -19,3 +19,4 @@ export {
   stravaWebhook,
 } from "./strava";
 export { scheduledFirestoreBackup } from "./backup";
+export { proxyPhotoDownload } from "./export";

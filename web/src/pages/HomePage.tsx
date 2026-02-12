@@ -13,9 +13,9 @@ function formatDuration(ms: number): string {
 }
 
 const communities = [
-  { name: "도싸", desc: "도로자전거싸롱", url: "https://dossa.bike", color: "orange" },
+  { name: "도싸", desc: "도로자전거싸롱", url: "https://corearoadbike.com/", color: "orange" },
   { name: "자출사", desc: "자전거 출퇴근 커뮤니티", url: "https://cafe.naver.com/bikecity", color: "green" },
-  { name: "클리앙 자전거당", desc: "클리앙 자전거 게시판", url: "https://clien.net", color: "blue" },
+  { name: "클리앙 자전거당", desc: "클리앙 자전거 게시판", url: "https://www.clien.net/service/board/cm_bike", color: "blue" },
   { name: "바이크셀", desc: "자전거 중고거래", url: "https://bikesell.co.kr", color: "purple" },
   { name: "더바이크", desc: "자전거 전문 매거진", url: "https://thebike.co.kr", color: "red" },
 ] as const;
@@ -38,7 +38,7 @@ const communityIcons: Record<string, string> = {
 
 function CommunityCard() {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
       <h3 className="text-sm font-semibold text-gray-700 mb-3">한국 자전거 커뮤니티</h3>
       <div className="space-y-1">
         {communities.map((c) => {
@@ -170,7 +170,7 @@ export default function HomePage() {
           {loading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse">
+                <div key={i} className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 animate-pulse">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-10 h-10 bg-gray-200 rounded-full" />
                     <div className="flex-1">
@@ -227,7 +227,7 @@ export default function HomePage() {
           {isLoggedIn ? (
             <>
               {/* Profile summary */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                 <Link to={`/athlete/${user.uid}`} className="flex items-center gap-3">
                   {user.photoURL ? (
                     <img
@@ -257,7 +257,7 @@ export default function HomePage() {
               </div>
 
               {/* This week summary */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">이번 주 요약</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <StatCard label="라이딩" value={`${thisWeek.rides}회`} />
@@ -269,33 +269,11 @@ export default function HomePage() {
 
               {/* Weekly distance chart */}
               {weeklyStats.length > 0 && (
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">주간 거리 (최근 12주)</h3>
                   <WeeklyChart data={weeklyStats} dataKey="distance" height={140} />
                 </div>
               )}
-
-              {/* Quick links */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">바로가기</h3>
-                <div className="space-y-2">
-                  <Link to="/settings" className="flex items-center gap-2 text-sm text-gray-600 hover:text-orange-600 transition-colors py-1">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    설정
-                  </Link>
-                  {!profile?.stravaConnected && (
-                    <Link to="/settings" className="flex items-center gap-2 text-sm text-orange-600 hover:text-orange-700 transition-colors py-1 font-medium">
-                      <svg className="w-4 h-4 text-[#FC4C02]" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-                      </svg>
-                      Strava 연동하기
-                    </Link>
-                  )}
-                </div>
-              </div>
 
               {/* Community links: desktop sidebar */}
               <CommunityCard />
@@ -303,7 +281,7 @@ export default function HomePage() {
           ) : (
             /* Not logged in: login prompt + community */
             <>
-              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 text-center">
                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
                   🚴
                 </div>
