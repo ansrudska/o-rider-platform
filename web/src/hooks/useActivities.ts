@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   collection,
   query,
@@ -6,11 +6,15 @@ import {
   orderBy,
   limit,
   onSnapshot,
+  getDocs,
+  type QueryConstraint,
 } from "firebase/firestore";
 import { firestore } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import type { Activity } from "@shared/types";
 import type { WeeklyStat } from "../components/WeeklyChart";
+
+export type DatePreset = "all" | "7d" | "30d" | "90d" | "year";
 
 export function useActivities() {
   const { user } = useAuth();
@@ -132,5 +136,108 @@ export function useWeeklyStats() {
       elevation: thisWeekActivities.reduce((s, a) => s + a.summary.elevationGain, 0),
     },
     totalCount,
+  };
+}
+
+function getDateFrom(preset: DatePreset): number | null {
+  if (preset === "all") return null;
+  const now = new Date();
+  switch (preset) {
+    case "7d":
+      return now.getTime() - 7 * 86400000;
+    case "30d":
+      return now.getTime() - 30 * 86400000;
+    case "90d":
+      return now.getTime() - 90 * 86400000;
+    case "year": {
+      const yearStart = new Date(now.getFullYear(), 0, 1);
+      return yearStart.getTime();
+    }
+  }
+}
+
+export function useActivitySearch() {
+  const { user } = useAuth();
+  const [keyword, setKeyword] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [allActivities, setAllActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [displayCount, setDisplayCount] = useState(20);
+  const cachedPresetRef = useRef<DatePreset | null>(null);
+
+  const active = keyword.length > 0 || datePreset !== "all";
+
+  // Fetch all activities from Firestore when search becomes active or datePreset changes
+  useEffect(() => {
+    if (!active) {
+      setAllActivities([]);
+      cachedPresetRef.current = null;
+      return;
+    }
+
+    // Only re-query if datePreset changed
+    if (cachedPresetRef.current === datePreset) return;
+
+    setLoading(true);
+    const constraints: QueryConstraint[] = user
+      ? [where("userId", "==", user.uid)]
+      : [where("visibility", "==", "everyone")];
+    constraints.push(orderBy("startTime", "desc"));
+
+    const dateFrom = getDateFrom(datePreset);
+    if (dateFrom !== null) {
+      constraints.push(where("startTime", ">=", dateFrom));
+    }
+
+    const q = query(collection(firestore, "activities"), ...constraints);
+
+    getDocs(q).then((snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Activity);
+      setAllActivities(items);
+      cachedPresetRef.current = datePreset;
+      setLoading(false);
+    }).catch((err) => {
+      console.error("[useActivitySearch] Firestore error:", err);
+      setAllActivities([]);
+      setLoading(false);
+    });
+  }, [user, active, datePreset]);
+
+  // Reset displayCount when filters change
+  useEffect(() => {
+    setDisplayCount(20);
+  }, [keyword, datePreset]);
+
+  const results = useMemo(() => {
+    if (!active) return [];
+    const kw = keyword.toLowerCase().trim();
+    if (!kw) return allActivities;
+    return allActivities.filter(
+      (a) => a.description?.toLowerCase().includes(kw) || a.nickname?.toLowerCase().includes(kw),
+    );
+  }, [active, keyword, allActivities]);
+
+  const loadMore = useCallback(() => setDisplayCount((prev) => prev + 20), []);
+  const hasMore = displayCount < results.length;
+
+  const reset = useCallback(() => {
+    setKeyword("");
+    setDatePreset("all");
+    setAllActivities([]);
+    cachedPresetRef.current = null;
+  }, []);
+
+  return {
+    keyword,
+    setKeyword,
+    datePreset,
+    setDatePreset,
+    results: results.slice(0, displayCount),
+    totalResults: results.length,
+    loading,
+    loadMore,
+    hasMore,
+    active,
+    reset,
   };
 }

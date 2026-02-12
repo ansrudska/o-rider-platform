@@ -1,9 +1,11 @@
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ActivityCard from "../components/ActivityCard";
 import StatCard from "../components/StatCard";
 import WeeklyChart from "../components/WeeklyChart";
 import { useAuth } from "../contexts/AuthContext";
-import { useActivities, useWeeklyStats } from "../hooks/useActivities";
+import { useActivities, useWeeklyStats, useActivitySearch } from "../hooks/useActivities";
+import type { DatePreset } from "../hooks/useActivities";
 
 function formatDuration(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -69,12 +71,31 @@ function CommunityCard() {
   );
 }
 
+const datePresetLabels: Record<DatePreset, string> = {
+  all: "전체",
+  "7d": "최근 7일",
+  "30d": "최근 30일",
+  "90d": "최근 90일",
+  year: "올해",
+};
+
 export default function HomePage() {
   const { user, profile, signInWithGoogle } = useAuth();
   const { activities, totalCount, loading, loadMore, hasMore } = useActivities();
   const { weeklyStats, thisWeek } = useWeeklyStats();
+  const search = useActivitySearch();
   const navigate = useNavigate();
   const feed = [...activities].sort((a, b) => b.createdAt - a.createdAt);
+
+  // Debounced keyword input
+  const [searchInput, setSearchInput] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => {
+      search.setKeyword(searchInput);
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchInput]);
 
   const isLoggedIn = !!user;
   const stravaConnected = !!profile?.stravaConnected;
@@ -161,13 +182,52 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-900">
               {isLoggedIn ? "활동 피드" : "최근 공개 활동"}
-              {totalCount > 0 && (
+              {!search.active && totalCount > 0 && (
                 <span className="ml-2 text-sm font-normal text-gray-400">{totalCount}개</span>
+              )}
+              {search.active && (
+                <span className="ml-2 text-sm font-normal text-orange-500">검색 결과 {search.totalResults}개</span>
               )}
             </h2>
           </div>
 
-          {loading ? (
+          {/* Search bar */}
+          <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="활동 검색..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                />
+              </div>
+              <select
+                value={search.datePreset}
+                onChange={(e) => search.setDatePreset(e.target.value as DatePreset)}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              >
+                {Object.entries(datePresetLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              {search.active && (
+                <button
+                  onClick={() => { search.reset(); setSearchInput(""); }}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="검색 초기화"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+          </div>
+
+          {(search.active ? search.loading : loading) ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 animate-pulse">
@@ -187,7 +247,36 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
+          ) : search.active ? (
+            /* Search results mode */
+            search.results.length === 0 ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                <div className="text-4xl mb-3">🔍</div>
+                <p className="text-gray-500 mb-2">검색 결과가 없습니다.</p>
+                <button
+                  onClick={() => { search.reset(); setSearchInput(""); }}
+                  className="text-orange-600 hover:underline text-sm font-medium"
+                >
+                  검색 초기화
+                </button>
+              </div>
+            ) : (
+              <>
+                {search.results.map((activity) => (
+                  <ActivityCard key={activity.id} activity={activity} />
+                ))}
+                {search.hasMore && (
+                  <button
+                    onClick={search.loadMore}
+                    className="w-full py-3 text-sm font-medium text-orange-600 bg-white rounded-lg border border-gray-200 hover:bg-orange-50 transition-colors"
+                  >
+                    더 보기 ({search.totalResults - search.results.length}개 남음)
+                  </button>
+                )}
+              </>
+            )
           ) : feed.length === 0 ? (
+            /* Normal feed: empty state */
             <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
               <div className="text-4xl mb-3">🚴</div>
               <p className="text-gray-500 mb-2">아직 활동이 없습니다.</p>
@@ -201,6 +290,7 @@ export default function HomePage() {
               )}
             </div>
           ) : (
+            /* Normal feed */
             <>
               {feed.map((activity) => (
                 <ActivityCard key={activity.id} activity={activity} />
