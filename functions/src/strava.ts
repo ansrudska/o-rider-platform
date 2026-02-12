@@ -44,6 +44,26 @@ async function getValidAccessToken(uid: string): Promise<string> {
   return tokens.access_token as string;
 }
 
+function extractSegmentLatlng(
+  latlngArr: [number, number][] | undefined,
+  startIndex: number,
+  endIndex: number,
+): [number, number][] | null {
+  if (!latlngArr || startIndex >= latlngArr.length) return null;
+  const end = Math.min(endIndex + 1, latlngArr.length);
+  const slice = latlngArr.slice(startIndex, end);
+  if (slice.length <= 2) return slice.length > 0 ? slice : null;
+  // Sample to max 200 points
+  if (slice.length <= 200) return slice;
+  const step = (slice.length - 1) / 199;
+  const sampled: [number, number][] = [];
+  for (let i = 0; i < 199; i++) {
+    sampled.push(slice[Math.round(i * step)]);
+  }
+  sampled.push(slice[slice.length - 1]);
+  return sampled;
+}
+
 interface StravaActivity {
   id: number;
   name: string;
@@ -463,6 +483,9 @@ export const stravaGetActivityStreams = onCall(
         const startLatlng = latlngArr?.[e.start_index] ?? null;
         const endLatlng = latlngArr?.[e.end_index] ?? null;
 
+        // Extract segment route from activity GPS stream
+        const segmentLatlng = extractSegmentLatlng(latlngArr, e.start_index, e.end_index);
+
         // Upsert segment (merge to keep existing data like polyline)
         batch.set(segRef, {
           name: seg.name,
@@ -476,6 +499,7 @@ export const stravaGetActivityStreams = onCall(
           state: seg.state ?? null,
           startLatlng: startLatlng,
           endLatlng: endLatlng,
+          ...(segmentLatlng ? { segmentLatlng } : {}),
           source: "strava",
           stravaSegmentId: seg.id,
           updatedAt: Date.now(),
@@ -721,6 +745,7 @@ async function fetchAndCacheStreams(
     for (const e of efforts) {
       const seg = e.segment;
       const segDocId = `strava_${seg.id}`;
+      const segmentLatlng = extractSegmentLatlng(latlngArr, e.start_index, e.end_index);
       batch.set(db.doc(`segments/${segDocId}`), {
         name: seg.name,
         distance: seg.distance,
@@ -733,6 +758,7 @@ async function fetchAndCacheStreams(
         state: seg.state ?? null,
         startLatlng: latlngArr?.[e.start_index] ?? null,
         endLatlng: latlngArr?.[e.end_index] ?? null,
+        ...(segmentLatlng ? { segmentLatlng } : {}),
         source: "strava",
         stravaSegmentId: seg.id,
         updatedAt: Date.now(),

@@ -348,20 +348,8 @@ export default function ActivityPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Map */}
-      <RouteMap
-        polyline={activity.thumbnailTrack}
-        latlng={streams?.latlng}
-        height="h-80 sm:h-96"
-        interactive
-        markerPosition={markerPosition}
-        photos={photos
-          .filter((p) => p.url && p.location)
-          .map((p) => ({ id: p.id, url: p.url!, location: p.location!, caption: p.caption }))}
-      />
-
-      {/* Header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
+      {/* 1. Header (제목) */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
         <div className="flex items-start gap-4">
           <Avatar
             name={activity.nickname}
@@ -422,47 +410,87 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      {/* Top Results */}
-      {topResults.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Top Results</h3>
-            {segmentEfforts.length > topResults.length && (
-              <a href="#segments" className="text-xs text-orange-600 hover:text-orange-700 font-medium">
-                View all
+      {/* 2. Photos (사진) */}
+      {photos.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+            사진 ({photos.length})
+          </h3>
+          <div className={`grid gap-2 ${
+            photos.length === 1 ? "grid-cols-1" :
+            photos.length === 2 ? "grid-cols-2" :
+            "grid-cols-2 sm:grid-cols-3"
+          }`}>
+            {photos.map((photo) => photo.url && (
+              <a
+                key={photo.id}
+                href={photo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative group overflow-hidden rounded-lg bg-gray-100 aspect-square"
+              >
+                <img
+                  src={photo.url}
+                  alt={photo.caption || ""}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy"
+                />
+                {photo.caption && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+                    <p className="text-xs text-white truncate">{photo.caption}</p>
+                  </div>
+                )}
               </a>
-            )}
-          </div>
-          <div className="space-y-2">
-            {topResults.map((effort) => {
-              const rank = effort.prRank ?? effort.komRank ?? 0;
-              const isKOM = effort.komRank != null && effort.komRank >= 1 && effort.komRank <= 10;
-              const ordinal = rank === 1 ? "Fastest" : rank === 2 ? "2nd fastest" : rank === 3 ? "3rd fastest" : `${rank}th`;
-              const label = isKOM
-                ? `KOM #${effort.komRank} on ${effort.name}`
-                : `${ordinal} time on ${effort.name}`;
-              return (
-                <div key={effort.id} className="flex items-center gap-3">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-gray-300" : "bg-orange-300"
-                  }`}>
-                    <svg className={`w-3.5 h-3.5 ${rank === 1 ? "text-yellow-800" : rank === 2 ? "text-gray-600" : "text-orange-700"}`} fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <span className="text-sm font-semibold text-gray-900 ml-1">({formatTime(effort.elapsedTime)})</span>
-                  </div>
-                </div>
-              );
-            })}
+            ))}
           </div>
         </div>
       )}
 
-      {/* Stats grid (Strava style) */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
+      {/* 3. Map (지도) */}
+      <RouteMap
+        polyline={activity.thumbnailTrack}
+        latlng={streams?.latlng}
+        height="h-80 sm:h-96"
+        interactive
+        markerPosition={markerPosition}
+        photos={photos
+          .filter((p) => p.url && p.location)
+          .map((p) => ({ id: p.id, url: p.url!, location: p.location!, caption: p.caption }))}
+      />
+
+      {/* 4. Elevation & Performance Chart (고도 & 성능 분석) */}
+      {showStreamSpinner && isStrava && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">고도 & 성능 분석</h3>
+          <div className="h-[280px] flex items-center justify-center">
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              GPS 데이터 로딩 중...
+            </div>
+          </div>
+        </div>
+      )}
+      {elevData.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+            고도 {overlays.length > 0 ? "& 성능 분석" : "프로파일"}
+            {hasStreams && <span className="ml-2 text-xs font-normal text-green-600">(실제 데이터)</span>}
+            {hasStreams && <span className="ml-1 text-xs font-normal text-gray-400">— 차트 위 마우스 호버로 지도에서 위치 확인</span>}
+          </h3>
+          <ElevationChart
+            data={elevData}
+            height={overlays.length > 0 ? 280 : 200}
+            onHoverIndex={hasStreams ? handleElevHover : undefined}
+            overlays={overlays.length > 0 ? overlays : undefined}
+          />
+        </div>
+      )}
+
+      {/* 5. Stats grid (거리, 이동시간, 획득고도) */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-6">
           <div className="border-l-2 border-orange-400 pl-3">
             <div className="text-xs text-gray-500 uppercase tracking-wide">거리</div>
@@ -515,132 +543,165 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      {/* Co-riders (함께 탄 라이더) */}
-      {coRiders.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-            <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            함께 탄 라이더 ({coRiders.length}명)
-          </h3>
-          <div className="space-y-2">
-            {coRiders.map((r) => (
-              <Link
-                key={r.id}
-                to={`/activity/${r.id}`}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Avatar
-                  name={r.nickname}
-                  imageUrl={r.profileImage}
-                  size="sm"
-                  userId={r.userId}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">{r.nickname}</div>
-                  <div className="text-xs text-gray-500 flex items-center gap-2">
-                    <span>{(r.summary.distance / 1000).toFixed(1)} km</span>
-                    <span>{r.summary.averageSpeed.toFixed(1)} km/h</span>
-                    {r.summary.averageHeartRate != null && <span>{r.summary.averageHeartRate} bpm</span>}
-                    {r.summary.averagePower != null && <span>{r.summary.averagePower} W</span>}
-                  </div>
-                </div>
-                <div className="text-xs text-gray-400">
-                  {formatDuration(r.summary.ridingTimeMillis)}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Combined Elevation + Performance Chart */}
-      {showStreamSpinner && isStrava && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">고도 & 성능 분석</h3>
-          <div className="h-[280px] flex items-center justify-center">
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      {/* 6. Top Results (주요 성과) */}
+      {topResults.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              {/* Trophy header icon */}
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                <path d="M7 4h10v7a5 5 0 01-10 0V4z" fill="#FBBF24" />
+                <path d="M7 4h10v7a5 5 0 01-10 0V4z" fill="url(#trophy-shine)" />
+                <path d="M7 6.5H5.5a2 2 0 00-2 2v0c0 1.66 1.34 3 3 3H7" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M17 6.5h1.5a2 2 0 012 2v0c0 1.66-1.34 3-3 3H17" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
+                <rect x="10" y="15" width="4" height="2.5" rx="0.5" fill="#F59E0B" />
+                <rect x="8" y="18" width="8" height="2" rx="1" fill="#D97706" />
+                <path d="M9.5 7v4" stroke="white" strokeWidth="1" strokeLinecap="round" opacity="0.45" />
+                <defs>
+                  <linearGradient id="trophy-shine" x1="7" y1="4" x2="17" y2="11">
+                    <stop offset="0%" stopColor="white" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
               </svg>
-              GPS 데이터 로딩 중...
+              <h3 className="text-sm font-bold text-gray-900">주요 성과</h3>
             </div>
-          </div>
-        </div>
-      )}
-      {elevData.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            고도 {overlays.length > 0 ? "& 성능 분석" : "프로파일"}
-            {hasStreams && <span className="ml-2 text-xs font-normal text-green-600">(실제 데이터)</span>}
-            {hasStreams && <span className="ml-1 text-xs font-normal text-gray-400">— 차트 위 마우스 호버로 지도에서 위치 확인</span>}
-          </h3>
-          <ElevationChart
-            data={elevData}
-            height={overlays.length > 0 ? 280 : 200}
-            onHoverIndex={hasStreams ? handleElevHover : undefined}
-            overlays={overlays.length > 0 ? overlays : undefined}
-          />
-        </div>
-      )}
-
-      {/* Photos */}
-      {photos.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            사진 ({photos.length})
-          </h3>
-          <div className={`grid gap-2 ${
-            photos.length === 1 ? "grid-cols-1" :
-            photos.length === 2 ? "grid-cols-2" :
-            "grid-cols-2 sm:grid-cols-3"
-          }`}>
-            {photos.map((photo) => photo.url && (
-              <a
-                key={photo.id}
-                href={photo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative group overflow-hidden rounded-lg bg-gray-100 aspect-square"
-              >
-                <img
-                  src={photo.url}
-                  alt={photo.caption || ""}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
-                />
-                {photo.caption && (
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                    <p className="text-xs text-white truncate">{photo.caption}</p>
-                  </div>
-                )}
+            {segmentEfforts.length > topResults.length && (
+              <a href="#segments" className="text-xs text-orange-600 hover:text-orange-700 font-medium">
+                전체 보기
               </a>
-            ))}
+            )}
+          </div>
+          <div className="space-y-1">
+            {topResults.map((effort) => {
+              const isPR = effort.prRank != null && effort.prRank >= 1 && effort.prRank <= 3;
+              const isKOM = effort.komRank != null && effort.komRank >= 1 && effort.komRank <= 10;
+              const rank = isPR ? effort.prRank! : (effort.komRank ?? 0);
+
+              let iconBg: string;
+              let iconContent: React.ReactNode;
+              let badgeText: string;
+              let badgeBg: string;
+
+              if (isKOM) {
+                iconBg = "bg-gradient-to-br from-orange-400 to-orange-600";
+                iconContent = (
+                  /* Crown icon - KOM */
+                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 17h16l-2-10-4.5 4L12 5l-1.5 6L6 7l-2 10z" fill="white" />
+                    <path d="M4 17h16l-2-10-4.5 4L12 5l-1.5 6L6 7l-2 10z" fill="white" opacity="0.15" />
+                    <circle cx="6" cy="7" r="1.5" fill="white" opacity="0.7" />
+                    <circle cx="12" cy="4.5" r="1.5" fill="white" opacity="0.7" />
+                    <circle cx="18" cy="7" r="1.5" fill="white" opacity="0.7" />
+                    <rect x="4" y="18" width="16" height="2.5" rx="0.75" fill="white" opacity="0.85" />
+                  </svg>
+                );
+                badgeText = `KOM #${effort.komRank}`;
+                badgeBg = "bg-gradient-to-r from-orange-500 to-orange-600 text-white";
+              } else if (rank === 1) {
+                iconBg = "bg-gradient-to-br from-yellow-300 to-amber-500";
+                iconContent = (
+                  /* Trophy icon - 1st PR */
+                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none">
+                    <path d="M8 4h8v6.5a4 4 0 01-8 0V4z" fill="#92400E" opacity="0.25" />
+                    <path d="M8 4h8v6.5a4 4 0 01-8 0V4z" fill="white" opacity="0.7" />
+                    <path d="M8 6H6.5a1.5 1.5 0 00-1.5 1.5v0A2.5 2.5 0 007.5 10H8" stroke="white" strokeWidth="1.3" strokeLinecap="round" opacity="0.8" />
+                    <path d="M16 6h1.5A1.5 1.5 0 0119 7.5v0a2.5 2.5 0 01-2.5 2.5H16" stroke="white" strokeWidth="1.3" strokeLinecap="round" opacity="0.8" />
+                    <rect x="10.5" y="13" width="3" height="3" rx="0.5" fill="white" opacity="0.7" />
+                    <rect x="9" y="17" width="6" height="2" rx="1" fill="white" opacity="0.85" />
+                    <path d="M10.5 6.5v3" stroke="white" strokeWidth="0.75" strokeLinecap="round" opacity="0.5" />
+                  </svg>
+                );
+                badgeText = "PR";
+                badgeBg = "bg-gradient-to-r from-yellow-400 to-amber-500 text-yellow-900";
+              } else if (rank === 2) {
+                iconBg = "bg-gradient-to-br from-slate-300 to-slate-500";
+                iconContent = (
+                  /* Medal icon - 2nd PR */
+                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none">
+                    <path d="M10 3l-1 5h6l-1-5h-4z" fill="white" opacity="0.5" />
+                    <circle cx="12" cy="14" r="6" fill="white" opacity="0.25" />
+                    <circle cx="12" cy="14" r="6" stroke="white" strokeWidth="1.5" opacity="0.8" />
+                    <circle cx="12" cy="14" r="3.5" stroke="white" strokeWidth="1" opacity="0.5" />
+                    <text x="12" y="16" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold" opacity="0.85">2</text>
+                  </svg>
+                );
+                badgeText = "2nd";
+                badgeBg = "bg-gradient-to-r from-slate-400 to-slate-500 text-white";
+              } else {
+                iconBg = "bg-gradient-to-br from-orange-300 to-orange-500";
+                iconContent = (
+                  /* Medal icon - 3rd PR */
+                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none">
+                    <path d="M10 3l-1 5h6l-1-5h-4z" fill="white" opacity="0.5" />
+                    <circle cx="12" cy="14" r="6" fill="white" opacity="0.25" />
+                    <circle cx="12" cy="14" r="6" stroke="white" strokeWidth="1.5" opacity="0.8" />
+                    <circle cx="12" cy="14" r="3.5" stroke="white" strokeWidth="1" opacity="0.5" />
+                    <text x="12" y="16" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold" opacity="0.85">3</text>
+                  </svg>
+                );
+                badgeText = "3rd";
+                badgeBg = "bg-gradient-to-r from-orange-400 to-orange-500 text-white";
+              }
+
+              return (
+                <div key={effort.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                  <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0 shadow-md`}>
+                    {iconContent}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/segment/strava_${effort.segment.id}`}
+                      className="text-sm font-medium text-gray-900 hover:text-orange-600 transition-colors truncate block"
+                    >
+                      {effort.name}
+                    </Link>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {(effort.segment.distance / 1000).toFixed(1)} km
+                      {effort.segment.averageGrade > 0 && ` · ${effort.segment.averageGrade.toFixed(1)}%`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${badgeBg}`}>
+                      {badgeText}
+                    </span>
+                    <span className="font-mono font-bold text-sm text-gray-900 tabular-nums">{formatTime(effort.elapsedTime)}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Segment Efforts (from Strava) */}
+      {/* 7. Segment Efforts (세그먼트) */}
       {segmentEfforts.length > 0 && (
-        <div id="segments" className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div id="segments" className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
             <div className="font-semibold text-sm flex items-center gap-2">
-              <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              {/* Mountain/segment icon */}
+              <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none">
+                <path d="M2 20L8.5 8l4 6 3.5-5L22 20H2z" fill="#F97316" opacity="0.15" />
+                <path d="M2 20L8.5 8l4 6 3.5-5L22 20" stroke="#F97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M8.5 8l4 6" stroke="#F97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               세그먼트 ({segmentEfforts.length})
             </div>
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-2 text-xs">
               {prCount > 0 && (
-                <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">
+                <span className="bg-gradient-to-r from-yellow-50 to-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none">
+                    <path d="M13 3l-1.5 6L6 5l-2 10h16l-2-10-4.5 4L13 3z" fill="currentColor" opacity="0.6" />
+                  </svg>
                   PR {prCount}
                 </span>
               )}
               {komCount > 0 && (
-                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">
-                  KOM/QOM {komCount}
+                <span className="bg-gradient-to-r from-orange-50 to-orange-100 text-orange-700 border border-orange-200 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 17h16l-2-10-4.5 4L12 5l-1.5 6L6 7l-2 10z" fill="currentColor" opacity="0.6" />
+                  </svg>
+                  KOM {komCount}
                 </span>
               )}
             </div>
@@ -690,16 +751,16 @@ export default function ActivityPage() {
                     <div className="text-right flex-shrink-0 ml-4">
                       <div className="flex items-center gap-2 justify-end">
                         {isPR && (
-                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                            effort.prRank === 1 ? "bg-yellow-400 text-yellow-900" :
-                            effort.prRank === 2 ? "bg-gray-300 text-gray-700" :
-                            "bg-orange-300 text-orange-800"
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm ${
+                            effort.prRank === 1 ? "bg-gradient-to-r from-yellow-400 to-amber-500 text-yellow-900" :
+                            effort.prRank === 2 ? "bg-gradient-to-r from-slate-300 to-slate-400 text-white" :
+                            "bg-gradient-to-r from-orange-300 to-orange-400 text-white"
                           }`}>
-                            {effort.prRank === 1 ? "PR" : `${effort.prRank}nd best`}
+                            {effort.prRank === 1 ? "PR" : effort.prRank === 2 ? "2nd" : "3rd"}
                           </span>
                         )}
                         {isKOM && (
-                          <span className="text-xs font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded">
+                          <span className="text-[11px] font-bold bg-gradient-to-r from-orange-500 to-orange-600 text-white px-2 py-0.5 rounded-full shadow-sm">
                             KOM #{effort.komRank}
                           </span>
                         )}
@@ -715,8 +776,51 @@ export default function ActivityPage() {
         </div>
       )}
 
+      {/* Co-riders (함께 탄 라이더) */}
+      {coRiders.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none">
+              <circle cx="9" cy="7" r="3.5" fill="#F97316" opacity="0.15" stroke="#F97316" strokeWidth="1.2" />
+              <path d="M2 19.5v-1a5 5 0 0110 0v1" stroke="#F97316" strokeWidth="1.3" strokeLinecap="round" />
+              <circle cx="16" cy="8" r="2.5" fill="#F97316" opacity="0.1" stroke="#F97316" strokeWidth="1.2" />
+              <path d="M14 19.5v-.5a4 4 0 018 0v.5" stroke="#F97316" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+            함께 탄 라이더 ({coRiders.length}명)
+          </h3>
+          <div className="space-y-2">
+            {coRiders.map((r) => (
+              <Link
+                key={r.id}
+                to={`/activity/${r.id}`}
+                className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Avatar
+                  name={r.nickname}
+                  imageUrl={r.profileImage}
+                  size="sm"
+                  userId={r.userId}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{r.nickname}</div>
+                  <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <span>{(r.summary.distance / 1000).toFixed(1)} km</span>
+                    <span>{r.summary.averageSpeed.toFixed(1)} km/h</span>
+                    {r.summary.averageHeartRate != null && <span>{r.summary.averageHeartRate} bpm</span>}
+                    {r.summary.averagePower != null && <span>{r.summary.averagePower} W</span>}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400">
+                  {formatDuration(r.summary.ridingTimeMillis)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Kudos + Comments */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
         <div className="flex items-center gap-4 pb-3 border-b border-gray-100">
           <button
             onClick={handleToggleKudos}

@@ -16,9 +16,9 @@ const CATEGORY_COLORS: Record<number, { bg: string; label: string }> = {
 };
 
 const RANK_STYLES = [
-  "bg-yellow-400 text-yellow-900",
-  "bg-gray-300 text-gray-700",
-  "bg-orange-300 text-orange-800",
+  "bg-gradient-to-r from-yellow-400 to-amber-500 text-yellow-900 shadow-sm",
+  "bg-gradient-to-r from-slate-300 to-slate-400 text-white shadow-sm",
+  "bg-gradient-to-r from-orange-300 to-orange-400 text-white shadow-sm",
 ];
 
 interface SegmentData {
@@ -34,6 +34,7 @@ interface SegmentData {
   state?: string;
   startLatlng?: [number, number] | null;
   endLatlng?: [number, number] | null;
+  segmentLatlng?: [number, number][] | null;
   source?: string;
 }
 
@@ -173,10 +174,12 @@ export default function SegmentPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Map with start/end markers */}
-      {segment.startLatlng && segment.endLatlng && (
+      {/* Map */}
+      {(segment.segmentLatlng || (segment.startLatlng && segment.endLatlng)) && (
         <RouteMap
-          latlng={[segment.startLatlng, segment.endLatlng]}
+          latlng={segment.segmentLatlng && segment.segmentLatlng.length > 0
+            ? segment.segmentLatlng
+            : [segment.startLatlng!, segment.endLatlng!]}
           height="h-56"
           interactive
           rounded
@@ -184,7 +187,7 @@ export default function SegmentPage() {
       )}
 
       {/* Header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
         <div className="flex items-center gap-3 flex-wrap">
           {cat && (
             <span className={`px-2.5 py-1 text-xs font-bold rounded ${cat.bg}`}>
@@ -223,7 +226,7 @@ export default function SegmentPage() {
       {/* KOM + My Best */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* KOM */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="text-xs text-gray-500 font-medium mb-2">KOM/QOM</div>
           {komEffort ? (
             <div className="flex items-center gap-3">
@@ -245,7 +248,7 @@ export default function SegmentPage() {
         </div>
 
         {/* My Best */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="text-xs text-gray-500 font-medium mb-2">내 최고 기록</div>
           {myBestEffort ? (
             <div>
@@ -277,7 +280,7 @@ export default function SegmentPage() {
       </div>
 
       {/* Leaderboard */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
           <h2 className="font-semibold text-sm">
             리더보드 ({efforts.length}명)
@@ -358,7 +361,7 @@ export default function SegmentPage() {
 
       {/* My History */}
       {user && myBestEffort && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           <button
             onClick={() => setShowAllEfforts(!showAllEfforts)}
             className="w-full px-5 py-3 border-b border-gray-200 flex items-center justify-between hover:bg-gray-50 transition-colors"
