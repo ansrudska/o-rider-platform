@@ -19,6 +19,17 @@ export default function StravaCallbackPage() {
     const storedState = sessionStorage.getItem("strava_state");
     const errorParam = searchParams.get("error");
 
+    // Mobile app redirect: state=mobile → redirect to app deep link
+    if (state === "mobile") {
+      if (code) {
+        const scope = searchParams.get("scope") || "";
+        window.location.href = `orider://strava/callback?code=${encodeURIComponent(code)}&scope=${encodeURIComponent(scope)}`;
+      } else {
+        window.location.href = `orider://strava/callback?error=${encodeURIComponent(errorParam || "denied")}`;
+      }
+      return;
+    }
+
     if (errorParam) {
       setStep("error");
       setErrorMsg("Strava 연동이 거부되었습니다.");
