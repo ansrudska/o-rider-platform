@@ -260,6 +260,21 @@ export const stravaImportActivities = onCall(
         continue;
       }
 
+      // Dedup: skip if same user already has an orider_ activity within ±5 minutes
+      const startTime = new Date(sa.start_date).getTime();
+      const FIVE_MIN = 5 * 60 * 1000;
+      const dupSnap = await db.collection("activities")
+        .where("userId", "==", uid)
+        .where("source", "==", "orider")
+        .where("startTime", ">=", startTime - FIVE_MIN)
+        .where("startTime", "<=", startTime + FIVE_MIN)
+        .limit(1)
+        .get();
+      if (!dupSnap.empty) {
+        skipped++;
+        continue;
+      }
+
       const activityData = convertStravaActivity(sa, uid, nickname);
       activityData.visibility = defaultVisibility;
       batch.set(docRef, activityData);
@@ -1227,6 +1242,24 @@ export const stravaWebhook = onRequest(
         console.log(`[webhook] Skipping non-cycling type: ${sa.type}`);
         res.status(200).send("OK");
         return;
+      }
+
+      // Dedup: skip if same user already has an orider_ activity within ±5 minutes
+      if (event.aspect_type === "create") {
+        const startTime = new Date(sa.start_date).getTime();
+        const FIVE_MIN = 5 * 60 * 1000;
+        const dupSnap = await db.collection("activities")
+          .where("userId", "==", uid)
+          .where("source", "==", "orider")
+          .where("startTime", ">=", startTime - FIVE_MIN)
+          .where("startTime", "<=", startTime + FIVE_MIN)
+          .limit(1)
+          .get();
+        if (!dupSnap.empty) {
+          console.log(`[webhook] Skipping duplicate: orider activity ${dupSnap.docs[0].id} already exists for user ${uid}`);
+          res.status(200).send("OK");
+          return;
+        }
       }
 
       const nickname = userData.nickname ?? "Rider";
