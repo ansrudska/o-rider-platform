@@ -112,6 +112,8 @@ export default function ActivityPage() {
   const [submitting, setSubmitting] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [showAllResults, setShowAllResults] = useState(false);
+  const [showAllSegments, setShowAllSegments] = useState(false);
 
   useEffect(() => {
     if (!activityId) return;
@@ -573,15 +575,19 @@ export default function ActivityPage() {
                 </defs>
               </svg>
               <h3 className="text-sm font-bold text-gray-900">주요 성과</h3>
+              <span className="text-xs text-gray-400">{topResults.length}</span>
             </div>
-            {segmentEfforts.length > topResults.length && (
-              <a href="#segments" className="text-xs text-orange-600 hover:text-orange-700 font-medium">
-                전체 보기
-              </a>
+            {topResults.length > 3 && (
+              <button
+                onClick={() => setShowAllResults(!showAllResults)}
+                className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+              >
+                {showAllResults ? "접기" : `전체 ${topResults.length}개`}
+              </button>
             )}
           </div>
           <div className="space-y-1">
-            {topResults.map((effort) => {
+            {(showAllResults ? topResults : topResults.slice(0, 3)).map((effort) => {
               const isPR = effort.prRank != null && effort.prRank >= 1 && effort.prRank <= 3;
               const isKOM = effort.komRank != null && effort.komRank >= 1 && effort.komRank <= 10;
               const rank = isPR ? effort.prRank! : (effort.komRank ?? 0);
@@ -715,7 +721,7 @@ export default function ActivityPage() {
             </div>
           </div>
           <div className="divide-y divide-gray-100">
-            {segmentEfforts.map((effort) => {
+            {(showAllSegments ? segmentEfforts : segmentEfforts.slice(0, 5)).map((effort) => {
               const seg = effort.segment;
               const elevGain = Math.max(0, seg.elevationHigh - seg.elevationLow);
               const cat = CLIMB_CATEGORIES[seg.climbCategory] || "";
@@ -781,6 +787,16 @@ export default function ActivityPage() {
               );
             })}
           </div>
+          {segmentEfforts.length > 5 && (
+            <div className="px-5 py-3 border-t border-gray-100 text-center">
+              <button
+                onClick={() => setShowAllSegments(!showAllSegments)}
+                className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+              >
+                {showAllSegments ? "접기" : `나머지 ${segmentEfforts.length - 5}개 더 보기`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
