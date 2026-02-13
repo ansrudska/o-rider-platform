@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ActivityCard from "../components/ActivityCard";
 import StatCard from "../components/StatCard";
@@ -87,15 +87,13 @@ export default function HomePage() {
   const navigate = useNavigate();
   const feed = [...activities].sort((a, b) => b.createdAt - a.createdAt);
 
-  // Debounced keyword input
   const [searchInput, setSearchInput] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => {
-    debounceRef.current = setTimeout(() => {
-      search.setKeyword(searchInput);
-    }, 300);
-    return () => clearTimeout(debounceRef.current);
-  }, [searchInput]);
+
+  const handleSearch = () => {
+    if (searchInput.trim()) {
+      search.search(searchInput);
+    }
+  };
 
   const isLoggedIn = !!user;
   const stravaConnected = !!profile?.stravaConnected;
@@ -199,21 +197,20 @@ export default function HomePage() {
                 </svg>
                 <input
                   type="text"
-                  placeholder="활동 검색..."
+                  placeholder="활동 검색... (Enter)"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleSearch(); }}
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                 />
               </div>
-              <select
-                value={search.datePreset}
-                onChange={(e) => search.setDatePreset(e.target.value as DatePreset)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              <button
+                onClick={handleSearch}
+                disabled={!searchInput.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {Object.entries(datePresetLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
+                검색
+              </button>
               {search.active && (
                 <button
                   onClick={() => { search.reset(); setSearchInput(""); }}
@@ -226,6 +223,22 @@ export default function HomePage() {
                 </button>
               )}
           </div>
+
+          {/* Date filter (only when search results are shown) */}
+          {search.active && !search.loading && (
+            <div className="flex items-center gap-2">
+              <select
+                value={search.datePreset}
+                onChange={(e) => search.setDatePreset(e.target.value as DatePreset)}
+                className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              >
+                {Object.entries(datePresetLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-400">결과 내 필터</span>
+            </div>
+          )}
 
           {(search.active ? search.loading : loading) ? (
             <div className="space-y-4">

@@ -44,6 +44,14 @@
       "collectionGroup": "activities",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activities",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "source", "order": "ASCENDING" },
         { "fieldPath": "startTime", "order": "ASCENDING" }

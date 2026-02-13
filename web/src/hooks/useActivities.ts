@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   collection,
   query,
@@ -158,25 +158,25 @@ function getDateFrom(preset: DatePreset): number | null {
 
 export function useActivitySearch() {
   const { user } = useAuth();
-  const [keyword, setKeyword] = useState("");
-  const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [allActivities, setAllActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(false);
+  const [searchedKeyword, setSearchedKeyword] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [displayCount, setDisplayCount] = useState(20);
-  const cachedPresetRef = useRef<DatePreset | null>(null);
 
-  const active = keyword.length > 0 || datePreset !== "all";
+  // Explicit search: fetches all activities once, then filters client-side
+  const search = useCallback((keyword: string) => {
+    const kw = keyword.trim();
+    if (!kw) return;
 
-  // Fetch all activities from Firestore when search becomes active or datePreset changes
-  useEffect(() => {
-    if (!active) {
-      setAllActivities([]);
-      cachedPresetRef.current = null;
-      return;
-    }
+    setActive(true);
+    setSearchedKeyword(kw);
+    setDatePreset("all");
+    setDisplayCount(20);
 
-    // Only re-query if datePreset changed
-    if (cachedPresetRef.current === datePreset) return;
+    // Only re-fetch if we don't have cached data
+    if (allActivities.length > 0) return;
 
     setLoading(true);
     const constraints: QueryConstraint[] = user
@@ -184,52 +184,49 @@ export function useActivitySearch() {
       : [where("visibility", "==", "everyone")];
     constraints.push(orderBy("startTime", "desc"));
 
-    const dateFrom = getDateFrom(datePreset);
-    if (dateFrom !== null) {
-      constraints.push(where("startTime", ">=", dateFrom));
-    }
-
     const q = query(collection(firestore, "activities"), ...constraints);
 
     getDocs(q).then((snap) => {
-      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Activity);
-      setAllActivities(items);
-      cachedPresetRef.current = datePreset;
+      setAllActivities(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Activity));
       setLoading(false);
     }).catch((err) => {
       console.error("[useActivitySearch] Firestore error:", err);
       setAllActivities([]);
       setLoading(false);
     });
-  }, [user, active, datePreset]);
+  }, [user, allActivities.length]);
 
   // Reset displayCount when filters change
   useEffect(() => {
     setDisplayCount(20);
-  }, [keyword, datePreset]);
+  }, [searchedKeyword, datePreset]);
 
+  // Filter: keyword + date (both client-side on cached data)
   const results = useMemo(() => {
     if (!active) return [];
-    const kw = keyword.toLowerCase().trim();
-    if (!kw) return allActivities;
-    return allActivities.filter(
+    const kw = searchedKeyword.toLowerCase();
+    let filtered = allActivities.filter(
       (a) => a.description?.toLowerCase().includes(kw) || a.nickname?.toLowerCase().includes(kw),
     );
-  }, [active, keyword, allActivities]);
+    const dateFrom = getDateFrom(datePreset);
+    if (dateFrom !== null) {
+      filtered = filtered.filter((a) => a.startTime >= dateFrom);
+    }
+    return filtered;
+  }, [active, searchedKeyword, allActivities, datePreset]);
 
   const loadMore = useCallback(() => setDisplayCount((prev) => prev + 20), []);
   const hasMore = displayCount < results.length;
 
   const reset = useCallback(() => {
-    setKeyword("");
+    setActive(false);
+    setSearchedKeyword("");
     setDatePreset("all");
     setAllActivities([]);
-    cachedPresetRef.current = null;
   }, []);
 
   return {
-    keyword,
-    setKeyword,
+    search,
     datePreset,
     setDatePreset,
     results: results.slice(0, displayCount),
