@@ -17,6 +17,11 @@ export {
   stravaMigrationStart,
   stravaMigrationComplete,
   stravaWebhook,
+  stravaQueueEnqueue,
+  stravaQueueCancel,
+  stravaQueueProcessor,
+  stravaMigrationVerify,
+  stravaMigrationFix,
 } from "./strava";
 export { scheduledFirestoreBackup } from "./backup";
 export { proxyPhotoDownload } from "./export";

@@ -14,7 +14,7 @@ export default function StatCard({
   subValue,
 }: StatCardProps) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
       <div className="flex items-center gap-2">
         {icon && <span className="text-lg">{icon}</span>}
         <span className="text-xs text-gray-500 font-medium">{label}</span>

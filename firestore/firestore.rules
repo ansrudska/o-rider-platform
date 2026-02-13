@@ -98,7 +98,8 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == userId
                     && request.resource.data.diff(resource.data).affectedKeys()
                        .hasOnly(['defaultVisibility', 'nickname']);
-      allow create, delete: if false;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
     }
 
     // Strava tokens (server-only, no client access)
@@ -112,7 +113,19 @@ service cloud.firestore {
                   && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null
                     && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.userId;
+      allow delete: if false;
+    }
+
+    // Strava queue (server-only)
+    match /strava_queue/{jobId} {
+      allow read, write: if false;
+    }
+
+    // Strava rate limit (server-only)
+    match /strava_rate_limit/{doc} {
+      allow read, write: if false;
     }
   }
 }

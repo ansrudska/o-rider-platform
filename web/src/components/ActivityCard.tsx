@@ -44,7 +44,7 @@ export default function ActivityCard({
   const isStrava = (activity as Activity & { source?: string }).source === "strava";
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
@@ -62,9 +62,21 @@ export default function ActivityCard({
               >
                 {activity.nickname}
               </Link>
-              {isStrava && (
+              {isStrava ? (
                 <svg className="w-3.5 h-3.5 text-[#FC4C02]" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" viewBox="0 0 200 200">
+                  <rect width="200" height="200" rx="40" fill="#26A69A"/>
+                  <path d="M0,168 L35,135 L65,152 L100,115 L135,140 L170,108 L200,135 L200,200 L0,200 Z" fill="#00695C"/>
+                  <g stroke="#FFFFFF" strokeWidth="18" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M30,150 L30,55"/>
+                    <path d="M30,55 L62,100 L95,55"/>
+                    <path d="M95,55 L95,150"/>
+                    <path d="M95,55 L130,55 Q158,55 158,82 Q158,108 130,108 L95,108"/>
+                    <path d="M125,108 L165,150"/>
+                  </g>
                 </svg>
               )}
               <span className="text-xs text-gray-400">{timeAgo(activity.createdAt)}</span>
@@ -81,7 +93,7 @@ export default function ActivityCard({
         </Link>
       </div>
 
-      {/* Stats row (Strava style) */}
+      {/* Stats row */}
       <div className="px-4 pb-3">
         <div className="flex gap-6 text-sm">
           <div>
@@ -97,7 +109,6 @@ export default function ActivityCard({
             <span className="ml-1.5 font-semibold">{formatDuration(s.ridingTimeMillis)}</span>
           </div>
         </div>
-        {/* Additional stats if available */}
         <div className="flex gap-6 text-sm mt-1">
           <div>
             <span className="text-gray-500">평속</span>
@@ -118,10 +129,27 @@ export default function ActivityCard({
         </div>
       </div>
 
-      {/* Route map */}
+      {/* Route map with overlay */}
       {showMap && (
-        <Link to={`/activity/${activity.id}`} className="block">
+        <Link to={`/activity/${activity.id}`} className="block relative group">
           <RouteMap polyline={activity.thumbnailTrack} height="h-52" rounded={false} />
+          {/* Gradient overlay + floating badges */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
+            <div className="flex gap-2">
+              <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-md text-xs font-semibold text-gray-800 shadow-sm">
+                {(s.distance / 1000).toFixed(1)} km
+              </span>
+              <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-md text-xs font-semibold text-gray-800 shadow-sm">
+                {formatDuration(s.ridingTimeMillis)}
+              </span>
+              {s.elevationGain > 0 && (
+                <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-md text-xs font-semibold text-green-700 shadow-sm">
+                  ▲ {Math.round(s.elevationGain)}m
+                </span>
+              )}
+            </div>
+          </div>
         </Link>
       )}
 
@@ -143,9 +171,9 @@ export default function ActivityCard({
           <span>{activity.commentCount > 0 ? activity.commentCount : "댓글"}</span>
         </Link>
         {activity.segmentEffortCount > 0 && (
-          <span className="flex items-center gap-1 ml-auto text-xs">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          <span className="flex items-center gap-1.5 ml-auto text-xs text-orange-500">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+              <path d="M2 20L8.5 8l4 6 3.5-5L22 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             {activity.segmentEffortCount}개 세그먼트
           </span>

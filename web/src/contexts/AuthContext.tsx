@@ -8,6 +8,8 @@ import {
 import {
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   type User,
 } from "firebase/auth";
@@ -15,6 +17,17 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, firestore, functions, googleProvider } from "../services/firebase";
 import type { UserProfile } from "@shared/types";
+
+function isWebView(): boolean {
+  const ua = navigator.userAgent || "";
+  // Android WebView
+  if (/wv\b/.test(ua)) return true;
+  // iOS WebView (not Safari, not CriOS/FxiOS)
+  if (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)) return true;
+  // Known in-app browsers
+  if (/KAKAOTALK|NAVER|Line|Instagram|FBAN|FBAV/.test(ua)) return true;
+  return false;
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -36,6 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Handle redirect result (for WebView sign-in)
+  useEffect(() => {
+    getRedirectResult(auth).catch(() => {});
+  }, []);
 
   // Listen to auth state
   useEffect(() => {
@@ -67,7 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    if (isWebView()) {
+      // WebView에서는 redirect 방식 사용 (팝업 차단됨)
+      await signInWithRedirect(auth, googleProvider);
+    } else {
+      await signInWithPopup(auth, googleProvider);
+    }
   };
 
   const logout = async () => {

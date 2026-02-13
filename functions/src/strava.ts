@@ -1,4 +1,5 @@
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 
@@ -94,7 +95,7 @@ function convertStravaActivity(sa: StravaActivity, uid: string, nickname: string
   return {
     userId: uid,
     nickname,
-    profileImage: null,
+    profileImage: null as string | null,
     type: "ride" as const,
     createdAt: startTime,
     startTime,
@@ -263,6 +264,7 @@ export const stravaImportActivities = onCall(
     const userDoc = await db.doc(`users/${uid}`).get();
     const userData = userDoc.data();
     const nickname = userData?.nickname ?? "Rider";
+    const profileImage: string | null = userData?.photoURL ?? null;
     const defaultVisibility = userData?.defaultVisibility ?? "everyone";
 
     const batch = db.batch();
@@ -297,6 +299,7 @@ export const stravaImportActivities = onCall(
 
       const activityData = convertStravaActivity(sa, uid, nickname);
       activityData.visibility = defaultVisibility;
+      activityData.profileImage = profileImage;
       batch.set(docRef, activityData);
       imported++;
       photos += sa.total_photo_count ?? 0;
@@ -355,8 +358,8 @@ export const stravaGetActivityStreams = onCall(
       const cachedData = cached.data()!;
       if (typeof cachedData.json === "string") {
         const parsed = JSON.parse(cachedData.json);
-        // Cache must include segment_efforts and photos (v3)
-        if ("segment_efforts" in parsed && "photos" in parsed) {
+        // Cache v4+: must have _cacheVersion to ensure complete data
+        if (parsed._cacheVersion >= 4) {
           return parsed;
         }
         console.log(`[stravaStreams] Cache missing segments for ${stravaActivityId}, re-fetching`);
@@ -370,9 +373,11 @@ export const stravaGetActivityStreams = onCall(
     const accessToken = await getValidAccessToken(uid);
     const headers = { Authorization: `Bearer ${accessToken}` };
 
-    // Get user nickname for effort records
+    // Get user profile for effort records
     const userDoc = await db.doc(`users/${uid}`).get();
-    const nickname = userDoc.data()?.nickname ?? "Rider";
+    const userDataForEfforts = userDoc.data();
+    const nickname = userDataForEfforts?.nickname ?? "Rider";
+    const profileImage: string | null = userDataForEfforts?.photoURL ?? null;
 
     // Fetch streams, activity detail, and photos in parallel
     const [streamsResp, detailResp, photosResp] = await Promise.all([
@@ -499,7 +504,7 @@ export const stravaGetActivityStreams = onCall(
           state: seg.state ?? null,
           startLatlng: startLatlng,
           endLatlng: endLatlng,
-          ...(segmentLatlng ? { segmentLatlng } : {}),
+          ...(segmentLatlng ? { segmentLatlng: JSON.stringify(segmentLatlng) } : {}),
           source: "strava",
           stravaSegmentId: seg.id,
           updatedAt: Date.now(),
@@ -518,6 +523,7 @@ export const stravaGetActivityStreams = onCall(
           activityId: `strava_${stravaActivityId}`,
           userId: uid,
           nickname,
+          profileImage,
           elapsedTime: e.elapsed_time * 1000,
           movingTime: e.moving_time * 1000,
           distance: e.distance,
@@ -566,6 +572,9 @@ export const stravaGetActivityStreams = onCall(
 
     console.log(`[stravaStreams] activity=${stravaActivityId} keys=${Object.keys(streamData).filter((k) => k !== "userId").join(",")}`);
 
+    // Mark cache version for validation
+    streamData._cacheVersion = 4;
+
     // Cache as JSON string (avoids nested array & index limit issues)
     const jsonStr = JSON.stringify(streamData);
     if (jsonStr.length < 1_000_000) {
@@ -601,12 +610,25 @@ function parseRateLimitHeaders(resp: Response): RateLimitInfo {
   };
 }
 
+function calcRateLimitWaitMs(): { wait15min: number; waitDaily: number } {
+  const now = Date.now();
+  // Strava 15-min windows align to :00/:15/:30/:45 UTC
+  const fifteenMin = 15 * 60 * 1000;
+  const wait15min = fifteenMin - (now % fifteenMin) + 5_000; // +5s buffer
+  // Daily limit resets at midnight UTC
+  const nowDate = new Date(now);
+  const midnightUtc = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate() + 1);
+  const waitDaily = midnightUtc - now + 5_000;
+  return { wait15min, waitDaily };
+}
+
 function checkRateLimit(info: RateLimitInfo): { paused: boolean; retryAfterSeconds: number } {
+  const { wait15min, waitDaily } = calcRateLimitWaitMs();
   if (info.usageDaily >= info.limitDaily - 5) {
-    return { paused: true, retryAfterSeconds: 3600 };
+    return { paused: true, retryAfterSeconds: Math.ceil(waitDaily / 1000) };
   }
   if (info.usage15min >= info.limit15min - 5) {
-    return { paused: true, retryAfterSeconds: 60 };
+    return { paused: true, retryAfterSeconds: Math.ceil(wait15min / 1000) };
   }
   return { paused: false, retryAfterSeconds: 0 };
 }
@@ -655,6 +677,7 @@ async function fetchAndCacheStreams(
   stravaActivityId: number,
   uid: string,
   nickname: string,
+  profileImage: string | null,
   accessToken: string,
   includeSegments: boolean,
   includePhotos: boolean,
@@ -758,7 +781,7 @@ async function fetchAndCacheStreams(
         state: seg.state ?? null,
         startLatlng: latlngArr?.[e.start_index] ?? null,
         endLatlng: latlngArr?.[e.end_index] ?? null,
-        ...(segmentLatlng ? { segmentLatlng } : {}),
+        ...(segmentLatlng ? { segmentLatlng: JSON.stringify(segmentLatlng) } : {}),
         source: "strava",
         stravaSegmentId: seg.id,
         updatedAt: Date.now(),
@@ -773,6 +796,7 @@ async function fetchAndCacheStreams(
         activityId: `strava_${stravaActivityId}`,
         userId: uid,
         nickname,
+        profileImage,
         elapsedTime: e.elapsed_time * 1000,
         movingTime: e.moving_time * 1000,
         distance: e.distance,
@@ -805,10 +829,13 @@ async function fetchAndCacheStreams(
     }
   }
 
-  // Only set default keys if they were actually fetched.
-  // If not fetched, leave keys absent so stravaGetActivityStreams re-fetches.
-  if (includeSegments && !("segment_efforts" in streamData)) streamData.segment_efforts = [];
-  if (includePhotos && !("photos" in streamData)) streamData.photos = [];
+  // Only set default keys if the fetch actually succeeded.
+  // If fetch failed (e.g. rate limited), leave keys absent so stravaGetActivityStreams re-fetches.
+  if (includeSegments && detailResp?.ok && !("segment_efforts" in streamData)) streamData.segment_efforts = [];
+  if (includePhotos && photosResp?.ok && !("photos" in streamData)) streamData.photos = [];
+
+  // Mark cache version for validation
+  streamData._cacheVersion = 4;
 
   // Cache as JSON string
   const cacheDocId = `strava_${stravaActivityId}`;
@@ -844,9 +871,11 @@ export const stravaBatchFetchStreams = onCall(
 
     const accessToken = await getValidAccessToken(uid);
 
-    // Get user nickname
+    // Get user profile
     const userDoc = await db.doc(`users/${uid}`).get();
-    const nickname = userDoc.data()?.nickname ?? "Rider";
+    const userData = userDoc.data();
+    const nickname = userData?.nickname ?? "Rider";
+    const profileImage: string | null = userData?.photoURL ?? null;
 
     // Query all strava activities for this user
     const activitiesSnap = await db
@@ -900,7 +929,7 @@ export const stravaBatchFetchStreams = onCall(
 
     for (const stravaId of batch) {
       try {
-        const result = await fetchAndCacheStreams(stravaId, uid, nickname, accessToken, includeSegments, includePhotos);
+        const result = await fetchAndCacheStreams(stravaId, uid, nickname, profileImage, accessToken, includeSegments, includePhotos);
         lastRateLimit = parseRateLimitHeaders(result.resp);
 
         if (result.resp.ok) {
@@ -1093,6 +1122,1076 @@ export const stravaMigrationComplete = onCall(async (request) => {
 
   console.log(`[migration] Completed for uid=${uid}: ${report.totalActivities} activities, ${Math.round(report.totalDistance / 1000)}km`);
   return report;
+});
+
+// ── Queue System ─────────────────────────────────────────────────────
+
+function periodToAfter(period: string): number | undefined {
+  const now = Math.floor(Date.now() / 1000);
+  if (period === "recent_90") return now - 90 * 86400;
+  if (period === "recent_180") return now - 180 * 86400;
+  return undefined; // "all"
+}
+
+export const stravaQueueEnqueue = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+  const { scope } = request.data as {
+    scope: { period: string; includePhotos: boolean; includeSegments: boolean };
+  };
+
+  if (!scope?.period) throw new HttpsError("invalid-argument", "scope is required");
+
+  // Check for existing active job
+  const existingSnap = await db.collection("strava_queue")
+    .where("uid", "==", uid)
+    .where("status", "in", ["pending", "processing", "waiting"])
+    .limit(1)
+    .get();
+
+  if (!existingSnap.empty) {
+    throw new HttpsError("already-exists", "Migration already in progress");
+  }
+
+  const now = Date.now();
+
+  // Create queue job
+  const jobRef = db.collection("strava_queue").doc();
+  await jobRef.set({
+    uid,
+    type: "activities",
+    scope,
+    nextPage: 1,
+    totalImported: 0,
+    totalSkipped: 0,
+    status: "pending",
+    priority: now,
+    createdAt: now,
+    updatedAt: now,
+    retryCount: 0,
+    maxRetries: 5,
+    lastError: null,
+    waitUntil: null,
+  });
+
+  // Count pending/processing jobs ahead
+  const aheadSnap = await db.collection("strava_queue")
+    .where("status", "in", ["pending", "processing"])
+    .where("priority", "<", now)
+    .get();
+  const queuePosition = aheadSnap.size;
+
+  // Update user migration status
+  await db.doc(`users/${uid}`).set(
+    {
+      migration: {
+        status: "QUEUED",
+        scope,
+        progress: {
+          totalActivities: 0,
+          importedActivities: 0,
+          skippedActivities: 0,
+          currentPage: 0,
+          totalPages: 0,
+          phase: "activities",
+          totalStreams: 0,
+          fetchedStreams: 0,
+          failedStreams: 0,
+          startedAt: now,
+          updatedAt: now,
+          queuePosition,
+          waitUntil: null,
+        },
+        report: null,
+      },
+    },
+    { merge: true },
+  );
+
+  console.log(`[queue] Enqueued job ${jobRef.id} for uid=${uid} scope=${JSON.stringify(scope)} position=${queuePosition}`);
+  return { jobId: jobRef.id, queuePosition };
+});
+
+export const stravaQueueCancel = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+
+  // Find active jobs for this user
+  const jobsSnap = await db.collection("strava_queue")
+    .where("uid", "==", uid)
+    .where("status", "in", ["pending", "processing", "waiting"])
+    .get();
+
+  if (jobsSnap.empty) {
+    throw new HttpsError("not-found", "No active migration found");
+  }
+
+  const batch = db.batch();
+  for (const doc of jobsSnap.docs) {
+    batch.delete(doc.ref);
+  }
+  await batch.commit();
+
+  // Reset migration status
+  await db.doc(`users/${uid}`).set(
+    {
+      migration: {
+        status: "NOT_STARTED",
+        progress: { updatedAt: Date.now(), queuePosition: null, waitUntil: null },
+      },
+    },
+    { merge: true },
+  );
+
+  console.log(`[queue] Cancelled ${jobsSnap.size} job(s) for uid=${uid}`);
+  return { cancelled: jobsSnap.size };
+});
+
+export const stravaQueueProcessor = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET],
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const startTime = Date.now();
+    const TIMEOUT_BUFFER_MS = 15_000; // Stop 15s before timeout
+
+    // ── Step 0: Reset stale jobs (processing for > 5 minutes) ──
+    const staleSnap = await db.collection("strava_queue")
+      .where("status", "==", "processing")
+      .where("updatedAt", "<", startTime - 5 * 60 * 1000)
+      .get();
+
+    for (const doc of staleSnap.docs) {
+      await doc.ref.update({ status: "pending", updatedAt: startTime });
+      console.log(`[queue] Reset stale job ${doc.id}`);
+    }
+
+    // ── Step 0b: Unblock waiting jobs whose waitUntil has passed ──
+    const waitingSnap = await db.collection("strava_queue")
+      .where("status", "==", "waiting")
+      .where("waitUntil", "<=", startTime)
+      .get();
+
+    for (const doc of waitingSnap.docs) {
+      await doc.ref.update({ status: "pending", waitUntil: null, updatedAt: startTime });
+      console.log(`[queue] Unblocked waiting job ${doc.id}`);
+    }
+
+    // ── Calculate API budget from rate limit ──
+    const rateLimitDoc = await db.doc("strava_rate_limit/current").get();
+    let budget: number;
+
+    if (rateLimitDoc.exists) {
+      const rl = rateLimitDoc.data()!;
+      const remaining15min = (rl.limit15min || 100) - (rl.usage15min || 0);
+      const remainingDaily = (rl.limitDaily || 1000) - (rl.usageDaily || 0);
+      // If 15-min window has reset since last update, assume full 15-min budget
+      if (rl.windowResetAt && rl.windowResetAt <= startTime) {
+        budget = Math.min(rl.limit15min || 100, remainingDaily) - 10;
+      } else {
+        budget = Math.min(remaining15min, remainingDaily) - 10;
+      }
+    } else {
+      budget = 80; // Conservative default
+    }
+
+    if (budget <= 0) {
+      console.log(`[queue] No API budget remaining`);
+      await updateQueuePositions();
+      return;
+    }
+
+    let totalApiCalls = 0;
+    let processedChunks = 0;
+
+    // ── Main processing loop: process jobs until budget exhausted ──
+    while (budget > 0 && Date.now() - startTime < 120_000 - TIMEOUT_BUFFER_MS) {
+      // Pick next pending job (round-robin via updatedAt ordering)
+      const jobSnap = await db.collection("strava_queue")
+        .where("status", "in", ["pending"])
+        .orderBy("updatedAt", "asc")
+        .limit(1)
+        .get();
+
+      if (jobSnap.empty) break;
+
+      const jobDoc = jobSnap.docs[0];
+      const job = jobDoc.data();
+      const jobId = jobDoc.id;
+      const uid = job.uid as string;
+
+      // Lock job
+      await jobDoc.ref.update({ status: "processing", updatedAt: Date.now() });
+
+      console.log(`[queue] Processing job ${jobId} uid=${uid} type=${job.type} budget=${budget}`);
+
+      try {
+        const accessToken = await getValidAccessToken(uid);
+        const userDoc = await db.doc(`users/${uid}`).get();
+        const userData = userDoc.data();
+        const nickname = userData?.nickname ?? "Rider";
+        const profileImage: string | null = userData?.photoURL ?? null;
+        const defaultVisibility = userData?.defaultVisibility ?? "everyone";
+
+        let result: { apiCalls: number; rateLimited: boolean };
+
+        if (job.type === "activities") {
+          result = await processActivitiesJob(jobDoc.ref, job, uid, accessToken, nickname, defaultVisibility);
+        } else {
+          result = await processStreamsJob(jobDoc.ref, job, uid, accessToken, nickname, profileImage, budget);
+        }
+
+        totalApiCalls += result.apiCalls;
+        budget -= result.apiCalls;
+        processedChunks++;
+
+        if (result.rateLimited) {
+          console.log(`[queue] Rate limited after ${totalApiCalls} API calls`);
+          break;
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[queue] Job ${jobId} error:`, errMsg);
+
+        // Token refresh failures → mark as failed
+        if (errMsg.includes("token refresh failed") || errMsg.includes("Strava not connected")) {
+          await jobDoc.ref.update({
+            status: "failed",
+            lastError: errMsg,
+            updatedAt: Date.now(),
+          });
+          await db.doc(`users/${uid}`).set(
+            {
+              migration: {
+                status: "FAILED",
+                progress: { updatedAt: Date.now(), queuePosition: null, waitUntil: null },
+              },
+            },
+            { merge: true },
+          );
+        } else {
+          // Retry with backoff
+          const retryCount = (job.retryCount || 0) + 1;
+          const maxRetries = job.maxRetries || 5;
+
+          if (retryCount >= maxRetries) {
+            await jobDoc.ref.update({
+              status: "failed",
+              retryCount,
+              lastError: errMsg,
+              updatedAt: Date.now(),
+            });
+            await db.doc(`users/${uid}`).set(
+              {
+                migration: {
+                  status: "FAILED",
+                  progress: { updatedAt: Date.now(), queuePosition: null, waitUntil: null },
+                },
+              },
+              { merge: true },
+            );
+          } else {
+            const backoffMinutes = [1, 2, 5, 10, 30][Math.min(retryCount - 1, 4)];
+            const waitUntil = Date.now() + backoffMinutes * 60 * 1000;
+            await jobDoc.ref.update({
+              status: "waiting",
+              retryCount,
+              lastError: errMsg,
+              waitUntil,
+              updatedAt: Date.now(),
+            });
+            await db.doc(`users/${uid}`).set(
+              {
+                migration: {
+                  status: "WAITING",
+                  progress: { updatedAt: Date.now(), waitUntil },
+                },
+              },
+              { merge: true },
+            );
+          }
+        }
+        // Continue to next job — don't let one user's error block others
+        continue;
+      }
+    }
+
+    console.log(`[queue] Tick done: ${processedChunks} chunks, ${totalApiCalls} API calls, budget remaining: ${budget}`);
+
+    // ── Update queue positions for all users ──
+    await updateQueuePositions();
+  },
+);
+
+async function processActivitiesJob(
+  jobRef: admin.firestore.DocumentReference,
+  job: admin.firestore.DocumentData,
+  uid: string,
+  accessToken: string,
+  nickname: string,
+  defaultVisibility: string,
+): Promise<{ apiCalls: number; rateLimited: boolean }> {
+  const page = job.nextPage || 1;
+  const scope = job.scope || {};
+  const after = periodToAfter(scope.period || "all");
+  const perPage = 200;
+
+  let url = `https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=${perPage}`;
+  if (after) url += `&after=${after}`;
+
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+
+  // Update global rate limit from headers
+  const rateLimit = parseRateLimitHeaders(resp);
+  await updateGlobalRateLimit(rateLimit);
+
+  if (resp.status === 429) {
+    const rlCheck = checkRateLimit(rateLimit);
+    const waitUntil = Date.now() + (rlCheck.retryAfterSeconds || 900) * 1000;
+    await jobRef.update({
+      status: "waiting",
+      waitUntil,
+      updatedAt: Date.now(),
+    });
+    await db.doc(`users/${uid}`).set(
+      { migration: { status: "WAITING", progress: { updatedAt: Date.now(), waitUntil } } },
+      { merge: true },
+    );
+    console.log(`[queue] Rate limited on activities page ${page}, wait ${rlCheck.retryAfterSeconds}s`);
+    return { apiCalls: 1, rateLimited: true };
+  }
+
+  if (!resp.ok) {
+    throw new Error(`Strava API failed: ${resp.status}`);
+  }
+
+  const stravaActivities: StravaActivity[] = await resp.json();
+  console.log(`[queue] Activities page ${page}: ${stravaActivities.length} returned`);
+
+  if (stravaActivities.length === 0) {
+    // Activities phase done
+    await finishActivitiesPhase(jobRef, job, uid, scope);
+    return { apiCalls: 1, rateLimited: false };
+  }
+
+  const CYCLING_TYPES = ["Ride", "VirtualRide", "EBikeRide", "Handcycle", "Velomobile"];
+  const rides = stravaActivities.filter((a) => CYCLING_TYPES.includes(a.type));
+
+  const batch = db.batch();
+  let imported = 0;
+  let skipped = 0;
+
+  for (const sa of rides) {
+    const docId = `strava_${sa.id}`;
+    const docRef = db.doc(`activities/${docId}`);
+    const existing = await docRef.get();
+    if (existing.exists) {
+      skipped++;
+      continue;
+    }
+
+    // Dedup check
+    const startTime = new Date(sa.start_date).getTime();
+    const FIVE_MIN = 5 * 60 * 1000;
+    const dupSnap = await db.collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "orider")
+      .where("startTime", ">=", startTime - FIVE_MIN)
+      .where("startTime", "<=", startTime + FIVE_MIN)
+      .limit(1)
+      .get();
+    if (!dupSnap.empty) {
+      skipped++;
+      continue;
+    }
+
+    const activityData = convertStravaActivity(sa, uid, nickname);
+    activityData.visibility = defaultVisibility;
+    batch.set(docRef, activityData);
+    imported++;
+  }
+
+  // Non-ride skipped
+  skipped += stravaActivities.length - rides.length;
+
+  if (imported > 0) await batch.commit();
+
+  const totalImported = (job.totalImported || 0) + imported;
+  const totalSkipped = (job.totalSkipped || 0) + skipped;
+  const hasMore = stravaActivities.length >= perPage;
+
+  if (!hasMore) {
+    // Activities phase done
+    await jobRef.update({ totalImported, totalSkipped, updatedAt: Date.now() });
+    await finishActivitiesPhase(jobRef, { ...job, totalImported, totalSkipped }, uid, scope);
+    return { apiCalls: 1, rateLimited: false };
+  }
+
+  // More pages to go - save progress, set back to pending for next tick
+  await jobRef.update({
+    status: "pending",
+    nextPage: page + 1,
+    totalImported,
+    totalSkipped,
+    updatedAt: Date.now(),
+  });
+
+  // Update user progress
+  await db.doc(`users/${uid}`).set(
+    {
+      migration: {
+        status: "RUNNING",
+        progress: {
+          importedActivities: totalImported,
+          skippedActivities: totalSkipped,
+          currentPage: page,
+          phase: "activities",
+          updatedAt: Date.now(),
+          queuePosition: 0,
+          waitUntil: null,
+        },
+      },
+    },
+    { merge: true },
+  );
+
+  console.log(`[queue] Activities page ${page} done: +${imported} imported, +${skipped} skipped, hasMore=true`);
+  return { apiCalls: 1, rateLimited: false };
+}
+
+async function finishActivitiesPhase(
+  jobRef: admin.firestore.DocumentReference,
+  job: admin.firestore.DocumentData,
+  uid: string,
+  scope: { includePhotos?: boolean; includeSegments?: boolean },
+) {
+  const needStreams = scope.includePhotos || scope.includeSegments;
+
+  if (needStreams) {
+    // Count uncached streams to determine total
+    const activitiesSnap = await db.collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "strava")
+      .get();
+
+    const allActivityIds = activitiesSnap.docs
+      .map((doc) => doc.data().stravaActivityId as number)
+      .filter(Boolean);
+
+    const cachedSnap = await db.collection("activity_streams")
+      .where("userId", "==", uid)
+      .select()
+      .get();
+    const cachedIds = new Set(cachedSnap.docs.map((doc) => doc.id));
+    const uncachedIds = allActivityIds.filter((id) => !cachedIds.has(`strava_${id}`));
+
+    // Delete activities job, create streams job
+    await jobRef.delete();
+
+    const now = Date.now();
+    await db.collection("strava_queue").doc().set({
+      uid,
+      type: "streams",
+      scope,
+      streamsRemaining: uncachedIds,
+      totalStreams: allActivityIds.length,
+      fetchedStreams: allActivityIds.length - uncachedIds.length,
+      failedStreams: 0,
+      status: "pending",
+      priority: job.priority, // Keep original priority
+      createdAt: job.createdAt,
+      updatedAt: now,
+      retryCount: 0,
+      maxRetries: 5,
+      lastError: null,
+      waitUntil: null,
+    });
+
+    await db.doc(`users/${uid}`).set(
+      {
+        migration: {
+          status: "RUNNING",
+          progress: {
+            phase: "streams",
+            totalStreams: allActivityIds.length,
+            fetchedStreams: allActivityIds.length - uncachedIds.length,
+            failedStreams: 0,
+            updatedAt: now,
+            queuePosition: 0,
+            waitUntil: null,
+          },
+        },
+      },
+      { merge: true },
+    );
+
+    console.log(`[queue] Activities done, created streams job: ${uncachedIds.length} to fetch`);
+  } else {
+    // No streams needed — complete migration
+    await jobRef.delete();
+    await completeMigration(uid);
+  }
+}
+
+async function processStreamsJob(
+  jobRef: admin.firestore.DocumentReference,
+  job: admin.firestore.DocumentData,
+  uid: string,
+  accessToken: string,
+  nickname: string,
+  profileImage: string | null,
+  maxBudget = 15,
+): Promise<{ apiCalls: number; rateLimited: boolean }> {
+  const remaining: number[] = job.streamsRemaining || [];
+  const scope = job.scope || {};
+  const includeSegments = scope.includeSegments ?? false;
+  const includePhotos = scope.includePhotos ?? false;
+
+  if (remaining.length === 0) {
+    await jobRef.delete();
+    await completeMigration(uid);
+    return { apiCalls: 0, rateLimited: false };
+  }
+
+  // Process streams up to budget limit
+  const apiCallsPerStream = (includeSegments && includePhotos) ? 3 : (includeSegments || includePhotos) ? 2 : 1;
+  const maxStreams = Math.max(1, Math.floor(maxBudget / apiCallsPerStream));
+  const batchSize = Math.min(maxStreams, remaining.length);
+  const batch = remaining.slice(0, batchSize);
+  let fetched = 0;
+  let failed = 0;
+  let totalApiCalls = 0;
+  const retryIds: number[] = [];     // IDs to retry later
+  const failedIds: number[] = [];    // IDs that permanently failed
+  const retryCountMap: Record<number, number> = job.streamRetryCount || {};
+
+  for (const stravaId of batch) {
+    try {
+      const result = await fetchAndCacheStreams(stravaId, uid, nickname, profileImage, accessToken, includeSegments, includePhotos);
+      totalApiCalls += result.apiCalls;
+
+      // Update global rate limit
+      const rl = parseRateLimitHeaders(result.resp);
+      await updateGlobalRateLimit(rl);
+
+      if (result.resp.status === 429) {
+        // Rate limited — put everything back and wait
+        retryIds.push(stravaId);
+        const unprocessed = remaining.slice(batch.indexOf(stravaId) + 1);
+        const allRemaining = [...retryIds, ...unprocessed];
+        const rl429 = checkRateLimit(rl);
+        const waitUntil = Date.now() + (rl429.retryAfterSeconds || 900) * 1000;
+        await jobRef.update({
+          status: "waiting",
+          streamsRemaining: allRemaining,
+          streamRetryCount: retryCountMap,
+          fetchedStreams: (job.fetchedStreams || 0) + fetched,
+          failedStreams: (job.failedStreams || 0) + failedIds.length,
+          waitUntil,
+          updatedAt: Date.now(),
+        });
+        await db.doc(`users/${uid}`).set(
+          {
+            migration: {
+              status: "WAITING",
+              progress: {
+                fetchedStreams: (job.fetchedStreams || 0) + fetched,
+                failedStreams: (job.failedStreams || 0) + failedIds.length,
+                updatedAt: Date.now(),
+                waitUntil,
+              },
+            },
+          },
+          { merge: true },
+        );
+        console.log(`[queue] Streams rate limited after ${fetched} fetches`);
+        return { apiCalls: totalApiCalls, rateLimited: true };
+      }
+
+      if (result.resp.ok) {
+        fetched++;
+        delete retryCountMap[stravaId];
+      } else {
+        // Non-429 error — retry up to 3 times, then give up
+        const count = (retryCountMap[stravaId] || 0) + 1;
+        retryCountMap[stravaId] = count;
+        if (count < 3) {
+          retryIds.push(stravaId);
+          console.warn(`[queue] Stream ${stravaId} failed (${result.resp.status}), retry ${count}/3`);
+        } else {
+          failedIds.push(stravaId);
+          delete retryCountMap[stravaId];
+          console.error(`[queue] Stream ${stravaId} permanently failed after 3 attempts`);
+        }
+      }
+
+      // Check approaching rate limit
+      const rlCheck = checkRateLimit(rl);
+      if (rlCheck.paused) {
+        const unprocessed = remaining.slice(batch.indexOf(stravaId) + 1);
+        const allRemaining = [...retryIds, ...unprocessed];
+        const waitUntil = Date.now() + (rlCheck.retryAfterSeconds || 60) * 1000;
+        await jobRef.update({
+          status: "waiting",
+          streamsRemaining: allRemaining,
+          streamRetryCount: retryCountMap,
+          fetchedStreams: (job.fetchedStreams || 0) + fetched,
+          failedStreams: (job.failedStreams || 0) + failedIds.length,
+          waitUntil,
+          updatedAt: Date.now(),
+        });
+        await db.doc(`users/${uid}`).set(
+          {
+            migration: {
+              status: "WAITING",
+              progress: {
+                fetchedStreams: (job.fetchedStreams || 0) + fetched,
+                failedStreams: (job.failedStreams || 0) + failedIds.length,
+                updatedAt: Date.now(),
+                waitUntil,
+              },
+            },
+          },
+          { merge: true },
+        );
+        console.log(`[queue] Streams approaching rate limit, pausing`);
+        return { apiCalls: totalApiCalls, rateLimited: true };
+      }
+    } catch (e) {
+      const count = (retryCountMap[stravaId] || 0) + 1;
+      retryCountMap[stravaId] = count;
+      if (count < 3) {
+        retryIds.push(stravaId);
+        console.warn(`[queue] Stream ${stravaId} exception, retry ${count}/3:`, e);
+      } else {
+        failedIds.push(stravaId);
+        delete retryCountMap[stravaId];
+        console.error(`[queue] Stream ${stravaId} permanently failed after 3 attempts:`, e);
+      }
+    }
+  }
+
+  // Append retry IDs to the back of remaining for next tick
+  const newRemaining = [...remaining.slice(batchSize), ...retryIds];
+  const newFetched = (job.fetchedStreams || 0) + fetched;
+  const newFailed = (job.failedStreams || 0) + failedIds.length;
+
+  if (newRemaining.length === 0) {
+    // Streams phase done
+    await jobRef.delete();
+    await completeMigration(uid);
+  } else {
+    // More streams to go
+    await jobRef.update({
+      status: "pending",
+      streamsRemaining: newRemaining,
+      streamRetryCount: retryCountMap,
+      fetchedStreams: newFetched,
+      failedStreams: newFailed,
+      updatedAt: Date.now(),
+    });
+    await db.doc(`users/${uid}`).set(
+      {
+        migration: {
+          status: "RUNNING",
+          progress: {
+            fetchedStreams: newFetched,
+            failedStreams: newFailed,
+            updatedAt: Date.now(),
+            queuePosition: 0,
+            waitUntil: null,
+          },
+        },
+      },
+      { merge: true },
+    );
+  }
+
+  console.log(`[queue] Streams: +${fetched} fetched, +${failed} failed, ${newRemaining.length} remaining`);
+  return { apiCalls: totalApiCalls, rateLimited: false };
+}
+
+async function completeMigration(uid: string) {
+  // Generate report (same as stravaMigrationComplete)
+  const activitiesSnap = await db.collection("activities")
+    .where("userId", "==", uid)
+    .where("source", "==", "strava")
+    .get();
+
+  let totalDistance = 0;
+  let totalTime = 0;
+  let totalElevation = 0;
+  let totalCalories = 0;
+  let totalPhotos = 0;
+  let totalSegmentEfforts = 0;
+  let earliestActivity = Infinity;
+  let latestActivity = 0;
+  const routeCounts: Record<string, { distance: number; count: number }> = {};
+
+  for (const doc of activitiesSnap.docs) {
+    const data = doc.data();
+    totalDistance += data.summary?.distance ?? 0;
+    totalTime += data.summary?.ridingTimeMillis ?? 0;
+    totalElevation += data.summary?.elevationGain ?? 0;
+    totalCalories += data.summary?.calories ?? 0;
+    totalPhotos += data.photoCount ?? 0;
+    totalSegmentEfforts += data.segmentEffortCount ?? 0;
+
+    const startTime = data.startTime ?? data.createdAt ?? 0;
+    if (startTime < earliestActivity) earliestActivity = startTime;
+    if (startTime > latestActivity) latestActivity = startTime;
+
+    const name = (data.description ?? "").trim();
+    if (name) {
+      if (!routeCounts[name]) routeCounts[name] = { distance: data.summary?.distance ?? 0, count: 0 };
+      routeCounts[name].count++;
+    }
+  }
+
+  const streamsSnap = await db.collection("activity_streams")
+    .where("userId", "==", uid)
+    .select()
+    .get();
+  const totalStreams = streamsSnap.size;
+
+  const topRoutes = Object.entries(routeCounts)
+    .sort(([, a], [, b]) => b.count - a.count)
+    .slice(0, 3)
+    .map(([name, { distance, count }]) => ({ name, distance, count }));
+
+  const report = {
+    totalActivities: activitiesSnap.size,
+    totalDistance,
+    totalTime,
+    totalElevation,
+    totalCalories,
+    totalPhotos,
+    totalSegmentEfforts,
+    totalStreams,
+    earliestActivity: earliestActivity === Infinity ? 0 : earliestActivity,
+    latestActivity,
+    topRoutes,
+  };
+
+  await db.doc(`users/${uid}`).set(
+    {
+      migration: {
+        status: "DONE",
+        report,
+        progress: { updatedAt: Date.now(), queuePosition: null, waitUntil: null },
+      },
+    },
+    { merge: true },
+  );
+
+  console.log(`[queue] Migration completed for uid=${uid}: ${report.totalActivities} activities, ${Math.round(report.totalDistance / 1000)}km`);
+}
+
+async function updateGlobalRateLimit(rl: RateLimitInfo) {
+  const now = Date.now();
+  // Calculate 15-min window reset: next 15-min boundary
+  const fifteenMin = 15 * 60 * 1000;
+  const windowResetAt = Math.ceil(now / fifteenMin) * fifteenMin;
+
+  await db.doc("strava_rate_limit/current").set({
+    usage15min: rl.usage15min,
+    limit15min: rl.limit15min,
+    usageDaily: rl.usageDaily,
+    limitDaily: rl.limitDaily,
+    lastUpdated: now,
+    windowResetAt,
+  });
+}
+
+function estimateRemainingApiCalls(job: admin.firestore.DocumentData): number {
+  if (job.type === "streams") {
+    const remaining = Array.isArray(job.streamsRemaining) ? job.streamsRemaining.length : 0;
+    const scope = job.scope || {};
+    const callsPerStream = (scope.includeSegments && scope.includePhotos) ? 3 : (scope.includeSegments || scope.includePhotos) ? 2 : 1;
+    return remaining * callsPerStream;
+  }
+  // activities: 1 API call per page
+  const page = job.nextPage || 1;
+  const period = job.scope?.period || "all";
+  const estimatedTotalPages = period === "recent_90" ? 5 : period === "recent_180" ? 10 : 30;
+  return Math.max(1, estimatedTotalPages - page + 1);
+}
+
+async function updateQueuePositions() {
+  const activeSnap = await db.collection("strava_queue")
+    .where("status", "in", ["pending", "processing", "waiting"])
+    .orderBy("updatedAt", "asc")
+    .get();
+
+  if (activeSnap.size === 0) return;
+
+  // Budget per minute: ~90 API calls per 15 min window / 15 = ~6 per minute
+  const BUDGET_PER_MINUTE = 6;
+
+  const jobs = activeSnap.docs.map((doc) => ({
+    uid: doc.data().uid as string,
+    apiCalls: estimateRemainingApiCalls(doc.data()),
+    status: doc.data().status as string,
+    waitUntil: doc.data().waitUntil as number | null,
+  }));
+
+  // Total API calls across all jobs — each user shares the budget
+  const totalCalls = jobs.reduce((sum, j) => sum + j.apiCalls, 0);
+
+  const batch = db.batch();
+
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i];
+    // Time = (all remaining API calls / budget per minute) * (my share of total)
+    // Simplified: my calls share the budget with everyone else's calls
+    let estimatedMinutes = Math.ceil(totalCalls / BUDGET_PER_MINUTE);
+
+    // If waiting for rate limit, use the longer of wait time or estimated time
+    if (job.status === "waiting" && job.waitUntil) {
+      const waitMinutes = Math.max(0, Math.ceil((job.waitUntil - Date.now()) / 60_000));
+      estimatedMinutes = Math.max(estimatedMinutes, waitMinutes);
+    }
+
+    batch.set(
+      db.doc(`users/${job.uid}`),
+      { migration: { progress: { queuePosition: i, estimatedMinutes } } },
+      { merge: true },
+    );
+  }
+
+  await batch.commit();
+}
+
+// ── Verify & Fix ─────────────────────────────────────────────────────
+
+export const stravaMigrationVerify = onCall(
+  { secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET], timeoutSeconds: 300 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+    const uid = request.auth.uid;
+    const accessToken = await getValidAccessToken(uid);
+
+    // Read scope from migration
+    const userDoc = await db.doc(`users/${uid}`).get();
+    const userData = userDoc.data();
+    const scope = userData?.migration?.scope;
+    const after = scope?.period ? periodToAfter(scope.period) : undefined;
+
+    // Phase 1: Fetch all cycling activity IDs from Strava
+    const CYCLING_TYPES = ["Ride", "VirtualRide", "EBikeRide", "Handcycle", "Velomobile"];
+    const stravaActivities: StravaActivity[] = [];
+    let page = 1;
+
+    while (true) {
+      let url = `https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=200`;
+      if (after) url += `&after=${after}`;
+
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+
+      if (resp.status === 429) {
+        throw new HttpsError("resource-exhausted", "Strava API rate limit. Please try again later.");
+      }
+      if (!resp.ok) {
+        throw new HttpsError("internal", `Strava API failed: ${resp.status}`);
+      }
+
+      const pageData: StravaActivity[] = await resp.json();
+      if (pageData.length === 0) break;
+
+      const rides = pageData.filter((a) => CYCLING_TYPES.includes(a.type));
+      stravaActivities.push(...rides);
+
+      if (pageData.length < 200) break;
+      page++;
+    }
+
+    console.log(`[verify] uid=${uid} strava activities: ${stravaActivities.length} (${page} pages)`);
+
+    // Phase 2: Check which are imported
+    const importedSnap = await db.collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "strava")
+      .select("stravaActivityId")
+      .get();
+    const importedIds = new Set(importedSnap.docs.map((d) => d.data().stravaActivityId as number));
+
+    const missingActivities = stravaActivities.filter((a) => !importedIds.has(a.id));
+
+    // Phase 3: Check which imported activities have streams cached
+    const allImportedStravaIds = importedSnap.docs
+      .map((d) => d.data().stravaActivityId as number)
+      .filter(Boolean);
+
+    const cachedSnap = await db.collection("activity_streams")
+      .where("userId", "==", uid)
+      .select()
+      .get();
+    const cachedIds = new Set(cachedSnap.docs.map((d) => d.id));
+    const missingStreamIds = allImportedStravaIds.filter((id) => !cachedIds.has(`strava_${id}`));
+
+    // Save verification results (including full activity data for missing ones)
+    const verification = {
+      checkedAt: Date.now(),
+      totalStrava: stravaActivities.length,
+      totalImported: importedIds.size,
+      missingActivityCount: missingActivities.length,
+      missingStreamCount: missingStreamIds.length,
+      missingActivityIds: missingActivities.map((a) => a.id),
+      missingStreamIds,
+      // Save full activity data so fix can import without extra API calls
+      missingActivitiesData: missingActivities.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        sport_type: a.sport_type,
+        distance: a.distance,
+        moving_time: a.moving_time,
+        elapsed_time: a.elapsed_time,
+        total_elevation_gain: a.total_elevation_gain,
+        start_date: a.start_date,
+        start_date_local: a.start_date_local,
+        average_speed: a.average_speed,
+        max_speed: a.max_speed,
+        average_heartrate: a.average_heartrate ?? null,
+        max_heartrate: a.max_heartrate ?? null,
+        average_watts: a.average_watts ?? null,
+        max_watts: a.max_watts ?? null,
+        weighted_average_watts: a.weighted_average_watts ?? null,
+        average_cadence: a.average_cadence ?? null,
+        kilojoules: a.kilojoules ?? null,
+        total_photo_count: a.total_photo_count ?? 0,
+        achievement_count: a.achievement_count ?? 0,
+        map: a.map ? { summary_polyline: a.map.summary_polyline } : null,
+      })),
+    };
+
+    await db.doc(`users/${uid}`).set(
+      { migration: { verification } },
+      { merge: true },
+    );
+
+    console.log(`[verify] uid=${uid} missing: ${missingActivities.length} activities, ${missingStreamIds.length} streams`);
+
+    return {
+      totalStrava: stravaActivities.length,
+      totalImported: importedIds.size,
+      missingActivityCount: missingActivities.length,
+      missingStreamCount: missingStreamIds.length,
+    };
+  },
+);
+
+export const stravaMigrationFix = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const uid = request.auth.uid;
+
+  const userDoc = await db.doc(`users/${uid}`).get();
+  const userData = userDoc.data();
+  const verification = userData?.migration?.verification;
+
+  if (!verification) {
+    throw new HttpsError("failed-precondition", "Run verification first");
+  }
+
+  const nickname = userData?.nickname ?? "Rider";
+  const defaultVisibility = userData?.defaultVisibility ?? "everyone";
+  const scope = userData?.migration?.scope;
+
+  let activitiesImported = 0;
+  let streamsQueued = 0;
+
+  // Phase 1: Import missing activities from saved data (no API calls)
+  const missingData = (verification.missingActivitiesData ?? []) as StravaActivity[];
+  if (missingData.length > 0) {
+    // Batch write in chunks of 500
+    for (let i = 0; i < missingData.length; i += 500) {
+      const chunk = missingData.slice(i, i + 500);
+      const batch = db.batch();
+      for (const sa of chunk) {
+        const docId = `strava_${sa.id}`;
+        const docRef = db.doc(`activities/${docId}`);
+        const activityData = convertStravaActivity(sa, uid, nickname);
+        activityData.visibility = defaultVisibility;
+        batch.set(docRef, activityData);
+        activitiesImported++;
+      }
+      await batch.commit();
+    }
+    console.log(`[fix] uid=${uid} imported ${activitiesImported} missing activities`);
+  }
+
+  // Phase 2: Queue stream fetches for missing streams
+  const missingStreamIds = (verification.missingStreamIds ?? []) as number[];
+  // Also include newly imported activities' streams
+  const allMissingStreamIds = [
+    ...missingStreamIds,
+    ...missingData.map((a: StravaActivity) => a.id),
+  ];
+  // Deduplicate
+  const uniqueStreamIds = [...new Set(allMissingStreamIds)];
+
+  if (uniqueStreamIds.length > 0 && (scope?.includePhotos || scope?.includeSegments)) {
+    const now = Date.now();
+    await db.collection("strava_queue").doc().set({
+      uid,
+      type: "streams",
+      scope: scope ?? { includePhotos: false, includeSegments: false },
+      streamsRemaining: uniqueStreamIds,
+      streamRetryCount: {},
+      totalStreams: uniqueStreamIds.length,
+      fetchedStreams: 0,
+      failedStreams: 0,
+      status: "pending",
+      priority: now,
+      createdAt: now,
+      updatedAt: now,
+      retryCount: 0,
+      maxRetries: 5,
+      lastError: null,
+      waitUntil: null,
+    });
+    streamsQueued = uniqueStreamIds.length;
+
+    await db.doc(`users/${uid}`).set(
+      {
+        migration: {
+          status: "RUNNING",
+          progress: {
+            phase: "streams",
+            totalStreams: uniqueStreamIds.length,
+            fetchedStreams: 0,
+            failedStreams: 0,
+            updatedAt: now,
+            queuePosition: 0,
+            waitUntil: null,
+          },
+          verification: admin.firestore.FieldValue.delete(),
+        },
+      },
+      { merge: true },
+    );
+
+    console.log(`[fix] uid=${uid} queued ${streamsQueued} streams`);
+  } else {
+    // No streams to fetch — just clear verification and regenerate report
+    await db.doc(`users/${uid}`).set(
+      { migration: { verification: admin.firestore.FieldValue.delete() } },
+      { merge: true },
+    );
+
+    // Regenerate report if activities were imported
+    if (activitiesImported > 0) {
+      await completeMigration(uid);
+    }
+  }
+
+  return { activitiesImported, streamsQueued };
 });
 
 export const stravaDisconnect = onCall(async (request) => {

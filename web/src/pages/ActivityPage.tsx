@@ -106,7 +106,7 @@ export default function ActivityPage() {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [coRiders, setCoRiders] = useState<Activity[]>([]);
   const [liked, setLiked] = useState(false);
-  const [kudosList, setKudosList] = useState<{ userId: string; nickname: string }[]>([]);
+  const [kudosList, setKudosList] = useState<{ userId: string; nickname: string; profileImage?: string | null }[]>([]);
   const [commentsList, setCommentsList] = useState<{ id: string; userId: string; nickname: string; profileImage: string | null; text: string; createdAt: number }[]>([]);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -116,17 +116,13 @@ export default function ActivityPage() {
   useEffect(() => {
     if (!activityId) return;
 
-    if (user) {
-      getDoc(doc(firestore, "activities", activityId)).then((snap) => {
-        if (snap.exists()) {
-          setActivity({ id: snap.id, ...snap.data() } as Activity);
-        }
-        setLoadingActivity(false);
-      }).catch(() => setLoadingActivity(false));
-    } else {
+    getDoc(doc(firestore, "activities", activityId)).then((snap) => {
+      if (snap.exists()) {
+        setActivity({ id: snap.id, ...snap.data() } as Activity);
+      }
       setLoadingActivity(false);
-    }
-  }, [activityId, user]);
+    }).catch(() => setLoadingActivity(false));
+  }, [activityId]);
 
   useEffect(() => {
     if (!activity || !user || !profile?.stravaConnected || streams) return;
@@ -167,7 +163,7 @@ export default function ActivityPage() {
     if (!activityId || !user) return;
     const kudosRef = collection(firestore, "activities", activityId, "kudos");
     return onSnapshot(kudosRef, (snap) => {
-      const list = snap.docs.map((d) => ({ userId: d.id, ...d.data() } as { userId: string; nickname: string }));
+      const list = snap.docs.map((d) => ({ userId: d.id, ...d.data() } as { userId: string; nickname: string; profileImage?: string | null }));
       setKudosList(list);
       setLiked(list.some((k) => k.userId === user.uid));
     });
@@ -365,9 +361,21 @@ export default function ActivityPage() {
               >
                 {activity.nickname}
               </Link>
-              {isStrava && (
+              {isStrava ? (
                 <svg className="w-4 h-4 text-[#FC4C02]" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 200 200">
+                  <rect width="200" height="200" rx="40" fill="#26A69A"/>
+                  <path d="M0,168 L35,135 L65,152 L100,115 L135,140 L170,108 L200,135 L200,200 L0,200 Z" fill="#00695C"/>
+                  <g stroke="#FFFFFF" strokeWidth="18" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M30,150 L30,55"/>
+                    <path d="M30,55 L62,100 L95,55"/>
+                    <path d="M95,55 L95,150"/>
+                    <path d="M95,55 L130,55 Q158,55 158,82 Q158,108 130,108 L95,108"/>
+                    <path d="M125,108 L165,150"/>
+                  </g>
                 </svg>
               )}
               {hasStreams && (
@@ -843,7 +851,7 @@ export default function ActivityPage() {
           <div className="py-3 border-b border-gray-100">
             <div className="flex -space-x-1">
               {activityKudos.map((k) => (
-                <Avatar key={k.userId} name={k.nickname} size="sm" userId={k.userId} />
+                <Avatar key={k.userId} name={k.nickname} imageUrl={k.profileImage} size="sm" userId={k.userId} />
               ))}
             </div>
           </div>
@@ -853,7 +861,7 @@ export default function ActivityPage() {
           <div className="pt-3 space-y-3">
             {activityComments.map((c) => (
               <div key={c.id} className="flex items-start gap-2">
-                <Avatar name={c.nickname} size="sm" userId={c.userId} />
+                <Avatar name={c.nickname} imageUrl={c.profileImage} size="sm" userId={c.userId} />
                 <div className="flex-1 bg-gray-50 rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2">
                     <Link to={`/athlete/${c.userId}`} className="text-xs font-semibold hover:text-orange-600">{c.nickname}</Link>

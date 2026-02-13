@@ -115,6 +115,7 @@ export interface SegmentEffort {
   id: string;
   userId: string;
   nickname: string;
+  profileImage: string | null;
   activityId: string;
   elapsedTime: number; // ms
   averageSpeed: number;
@@ -169,7 +170,7 @@ export interface FollowRelation {
 }
 
 // Migration
-export type MigrationStatus = "NOT_STARTED" | "RUNNING" | "PARTIAL_DONE" | "DONE" | "FAILED";
+export type MigrationStatus = "NOT_STARTED" | "QUEUED" | "RUNNING" | "WAITING" | "PARTIAL_DONE" | "DONE" | "FAILED";
 export type MigrationPeriod = "recent_90" | "recent_180" | "all";
 
 export interface MigrationScope {
@@ -192,6 +193,9 @@ export interface MigrationProgress {
   failedStreams: number;
   startedAt: number;
   updatedAt: number;
+  queuePosition: number | null;
+  waitUntil: number | null;
+  estimatedMinutes: number | null;
 }
 
 export interface MigrationReport {

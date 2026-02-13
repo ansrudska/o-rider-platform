@@ -148,9 +148,20 @@ export default function AthletePage() {
   return (
     <div className="space-y-6">
       {/* Cover + Profile */}
-      <div className="bg-gradient-to-r from-orange-400 to-orange-600 rounded-lg h-36 relative">
+      <div className="relative">
+        <div className="bg-gradient-to-br from-orange-400 via-amber-500 to-orange-600 rounded-xl h-40 relative overflow-hidden shadow-sm">
+          {/* Decorative pattern */}
+          <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="cover-pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                <circle cx="20" cy="20" r="1.5" fill="white" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#cover-pattern)" />
+          </svg>
+        </div>
         <div className="absolute -bottom-10 left-6 flex items-end gap-4">
-          <div className="ring-4 ring-white rounded-full bg-white">
+          <div className="ring-4 ring-white rounded-full bg-white shadow-md">
             {photoURL ? (
               <img
                 src={photoURL}

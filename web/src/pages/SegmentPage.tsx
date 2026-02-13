@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { collection, query, orderBy, getDocs } from "firebase/firestore";
 import { firestore } from "../services/firebase";
 import { useDocument } from "../hooks/useFirestore";
 import { useAuth } from "../contexts/AuthContext";
+import { useStrava } from "../hooks/useStrava";
 import RouteMap from "../components/RouteMap";
 import Avatar from "../components/Avatar";
 
@@ -34,7 +35,7 @@ interface SegmentData {
   state?: string;
   startLatlng?: [number, number] | null;
   endLatlng?: [number, number] | null;
-  segmentLatlng?: [number, number][] | null;
+  segmentLatlng?: string | null;
   source?: string;
 }
 
@@ -44,6 +45,7 @@ interface EffortData {
   activityId: string;
   userId: string;
   nickname: string;
+  profileImage?: string | null;
   elapsedTime: number;
   movingTime: number;
   distance: number;
@@ -71,11 +73,14 @@ function formatTime(ms: number): string {
 
 export default function SegmentPage() {
   const { segmentId } = useParams<{ segmentId: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { getStreams } = useStrava();
   const { data: segment, loading: segLoading } = useDocument<SegmentData>("segments", segmentId);
 
   const [efforts, setEfforts] = useState<EffortData[]>([]);
   const [loadingEfforts, setLoadingEfforts] = useState(true);
+  const [resolvedLatlng, setResolvedLatlng] = useState<[number, number][] | null>(null);
+  const fetchedRef = useRef(false);
 
   // Fetch efforts sorted by elapsedTime (leaderboard)
   useEffect(() => {
@@ -109,6 +114,38 @@ export default function SegmentPage() {
 
     fetchEfforts();
   }, [segmentId]);
+
+  // Auto-resolve segment route: if segmentLatlng is missing, fetch activity streams to populate it
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    if (!segment || (segment.segmentLatlng && segment.segmentLatlng.length > 2)) return;
+    if (!user || !profile?.stravaConnected) return;
+    if (efforts.length === 0 || loadingEfforts) return;
+
+    // Find an effort with a strava activityId
+    const effort = efforts.find((e) => e.activityId?.startsWith("strava_"));
+    if (!effort) return;
+
+    const stravaId = parseInt(effort.activityId.replace("strava_", ""), 10);
+    if (!stravaId) return;
+
+    fetchedRef.current = true;
+    // getStreams triggers stravaGetActivityStreams which saves segmentLatlng as side-effect
+    getStreams(stravaId).then((data) => {
+      // Extract segment route from streams for immediate display
+      const streams = data as { latlng?: [number, number][]; segment_efforts?: { segment: { id: number }; startIndex: number; endIndex: number }[] };
+      if (!streams?.latlng || !streams?.segment_efforts) return;
+
+      const stravaSegId = segment.source === "strava" ? (segment as SegmentData & { stravaSegmentId?: number }).stravaSegmentId : null;
+      if (!stravaSegId) return;
+
+      const matchingEffort = streams.segment_efforts.find((e) => e.segment.id === stravaSegId);
+      if (!matchingEffort) return;
+
+      const slice = streams.latlng.slice(matchingEffort.startIndex, matchingEffort.endIndex + 1);
+      if (slice.length > 0) setResolvedLatlng(slice);
+    }).catch(() => {});
+  }, [segment, user, profile?.stravaConnected, efforts, loadingEfforts]);
 
   // My all efforts (for personal history)
   const [allEfforts, setAllEfforts] = useState<EffortData[]>([]);
@@ -175,16 +212,26 @@ export default function SegmentPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Map */}
-      {(segment.segmentLatlng || (segment.startLatlng && segment.endLatlng)) && (
-        <RouteMap
-          latlng={segment.segmentLatlng && segment.segmentLatlng.length > 0
-            ? segment.segmentLatlng
-            : [segment.startLatlng!, segment.endLatlng!]}
-          height="h-56"
-          interactive
-          rounded
-        />
-      )}
+      {(() => {
+        const parsed: [number, number][] | null = segment.segmentLatlng
+          ? JSON.parse(segment.segmentLatlng)
+          : null;
+        const latlng = (parsed && parsed.length > 0)
+          ? parsed
+          : resolvedLatlng
+            ? resolvedLatlng
+            : (segment.startLatlng && segment.endLatlng)
+              ? [segment.startLatlng, segment.endLatlng]
+              : null;
+        return latlng && (
+          <RouteMap
+            latlng={latlng}
+            height="h-[28rem]"
+            interactive
+            rounded
+          />
+        );
+      })()}
 
       {/* Header */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
@@ -230,7 +277,7 @@ export default function SegmentPage() {
           <div className="text-xs text-gray-500 font-medium mb-2">KOM/QOM</div>
           {komEffort ? (
             <div className="flex items-center gap-3">
-              <Avatar name={komEffort.nickname} size="md" userId={komEffort.userId} />
+              <Avatar name={komEffort.nickname} imageUrl={komEffort.profileImage} size="md" userId={komEffort.userId} />
               <div className="flex-1">
                 <Link to={`/athlete/${komEffort.userId}`} className="font-semibold text-sm hover:text-orange-600">
                   {komEffort.nickname}
@@ -326,7 +373,7 @@ export default function SegmentPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <Avatar name={effort.nickname || "Rider"} size="sm" userId={effort.userId} />
+                        <Avatar name={effort.nickname || "Rider"} imageUrl={effort.profileImage} size="sm" userId={effort.userId} />
                         <Link
                           to={`/athlete/${effort.userId}`}
                           className={`font-medium hover:text-orange-600 ${isMe ? "text-orange-600" : ""}`}

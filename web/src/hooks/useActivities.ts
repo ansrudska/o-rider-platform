@@ -133,7 +133,7 @@ export function useWeeklyStats() {
       rides: thisWeekActivities.length,
       distance: thisWeekActivities.reduce((s, a) => s + a.summary.distance, 0),
       time: thisWeekActivities.reduce((s, a) => s + a.summary.ridingTimeMillis, 0),
-      elevation: thisWeekActivities.reduce((s, a) => s + a.summary.elevationGain, 0),
+      elevation: Math.round(thisWeekActivities.reduce((s, a) => s + a.summary.elevationGain, 0)),
     },
     totalCount,
   };

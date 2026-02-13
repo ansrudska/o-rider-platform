@@ -58,7 +58,7 @@ export default function LeaderboardTable({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Avatar name={e.nickname} size="sm" userId={e.userId} />
+                    <Avatar name={e.nickname} imageUrl={e.profileImage} size="sm" userId={e.userId} />
                     <span
                       className={`font-medium ${isHighlighted ? "text-orange-600" : ""}`}
                     >
