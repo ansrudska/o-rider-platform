@@ -314,6 +314,7 @@ export default function ActivityPage() {
 
   const s = activity.summary;
   const isStrava = (activity as Activity & { source?: string }).source === "strava";
+  const activityProfileImage = activity.profileImage || (user?.uid === activity.userId ? user?.photoURL ?? null : null);
   const hasStreams = sampledData.length > 0;
 
   // Elevation data from streams
@@ -351,7 +352,7 @@ export default function ActivityPage() {
         <div className="flex items-start gap-4">
           <Avatar
             name={activity.nickname}
-            imageUrl={activity.profileImage}
+            imageUrl={activityProfileImage}
             size="lg"
             userId={activity.userId}
           />

@@ -85,7 +85,11 @@ export default function HomePage() {
   const { weeklyStats, thisWeek } = useWeeklyStats();
   const search = useActivitySearch();
   const navigate = useNavigate();
-  const feed = [...activities].sort((a, b) => b.createdAt - a.createdAt);
+  const feed = [...activities].sort((a, b) => b.createdAt - a.createdAt).map((a) =>
+    !a.profileImage && user?.uid === a.userId && user?.photoURL
+      ? { ...a, profileImage: user.photoURL }
+      : a,
+  );
 
   const [searchInput, setSearchInput] = useState("");
 

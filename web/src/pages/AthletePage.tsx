@@ -113,7 +113,9 @@ export default function AthletePage() {
 
   const nickname = firestoreProfile?.nickname;
   const photoURL = firestoreProfile?.photoURL ?? null;
-  const activities = firestoreActivities;
+  const activities = firestoreActivities.map((a) =>
+    !a.profileImage && photoURL ? { ...a, profileImage: photoURL } : a,
+  );
   const isMe = currentUser?.uid === userId;
 
   const totalDistance = useMemo(

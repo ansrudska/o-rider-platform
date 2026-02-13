@@ -9,13 +9,9 @@ export { onFollowCreate, onFollowDelete } from "./follow";
 export { ensureUserProfile, updateDefaultVisibility } from "./auth";
 export {
   stravaExchangeToken,
-  stravaImportActivities,
   stravaGetActivityStreams,
-  stravaBatchFetchStreams,
   stravaDisconnect,
   stravaDeleteUserData,
-  stravaMigrationStart,
-  stravaMigrationComplete,
   stravaWebhook,
   stravaQueueEnqueue,
   stravaQueueCancel,
