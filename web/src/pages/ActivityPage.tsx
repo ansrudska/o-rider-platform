@@ -134,6 +134,8 @@ export default function ActivityPage() {
   const [showAllResults, setShowAllResults] = useState(false);
   const [showAllSegments, setShowAllSegments] = useState(false);
   const [activeOverlays, setActiveOverlays] = useState<Set<string>>(new Set());
+  const [streamsError, setStreamsError] = useState<string | null>(null);
+  const [loadingStreams, setLoadingStreams] = useState(false);
 
   useEffect(() => {
     if (!activityId) return;
@@ -152,13 +154,19 @@ export default function ActivityPage() {
     const stravaId = (activity as Activity & { stravaActivityId?: number }).stravaActivityId;
     if (!stravaId) return;
 
+    setLoadingStreams(true);
+    setStreamsError(null);
     // Delay showing spinner to avoid flash when cached data returns quickly
     const timer = setTimeout(() => setShowStreamSpinner(true), 500);
     getStreams(stravaId).then((data) => {
       setStreams(data as unknown as ActivityStreams);
-    }).catch(() => {}).finally(() => {
+    }).catch((err) => {
+      console.error("Streams load failed:", err);
+      setStreamsError(err instanceof Error ? err.message : "GPS 데이터를 불러올 수 없습니다");
+    }).finally(() => {
       clearTimeout(timer);
       setShowStreamSpinner(false);
+      setLoadingStreams(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, user, profile?.stravaConnected]);
@@ -565,6 +573,45 @@ export default function ActivityPage() {
             </div>
           </div>
 
+          {/* Streams status message */}
+          {isStrava && !hasStreams && !loadingStreams && !showStreamSpinner && (
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+              {streamsError ? (
+                <div className="text-center text-sm text-red-500 dark:text-red-400">
+                  <p>{streamsError}</p>
+                  <button
+                    onClick={() => {
+                      const stravaId = (activity as Activity & { stravaActivityId?: number }).stravaActivityId;
+                      if (!stravaId) return;
+                      setLoadingStreams(true);
+                      setStreamsError(null);
+                      setShowStreamSpinner(true);
+                      getStreams(stravaId).then((data) => {
+                        setStreams(data as unknown as ActivityStreams);
+                      }).catch((err) => {
+                        setStreamsError(err instanceof Error ? err.message : "GPS 데이터를 불러올 수 없습니다");
+                      }).finally(() => {
+                        setShowStreamSpinner(false);
+                        setLoadingStreams(false);
+                      });
+                    }}
+                    className="mt-2 text-orange-600 hover:text-orange-700 font-medium"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              ) : !user ? (
+                <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                  로그인하면 고도 프로파일, 세그먼트, 성능 분석을 볼 수 있습니다
+                </p>
+              ) : !profile?.stravaConnected ? (
+                <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                  <Link to="/settings" className="text-orange-600 hover:text-orange-700 font-medium">Strava를 연동</Link>하면 상세 분석을 볼 수 있습니다
+                </p>
+              ) : null}
+            </div>
+          )}
+
           {/* 6. Top Results (주요 성과) */}
           {topResults.length > 0 && (
             <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
@@ -743,7 +790,7 @@ export default function ActivityPage() {
         </div>
       )}
           {/* 4. Elevation & Performance Chart (고도 & 성능 분석) */}
-          {showStreamSpinner && isStrava && (
+          {(showStreamSpinner || loadingStreams) && isStrava && (
             <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">고도 & 성능 분석</h3>
               <div className="h-[320px] flex items-center justify-center">

@@ -235,8 +235,13 @@ export const stravaGetActivityStreams = onCall(
       if (cachedData._cacheVersion >= 4) {
         if (cachedData.storage === "gcs" && cachedData.gcsPath) {
           // GCS cache
-          const [content] = await admin.storage().bucket().file(cachedData.gcsPath).download();
-          return JSON.parse(zlib.gunzipSync(content).toString());
+          try {
+            const [content] = await admin.storage().bucket().file(cachedData.gcsPath).download();
+            return JSON.parse(zlib.gunzipSync(content).toString());
+          } catch (gcsErr) {
+            console.warn(`[stravaStreams] GCS file missing for ${stravaActivityId} (${cachedData.gcsPath}), re-fetching from Strava`);
+            await cacheRef.delete();
+          }
         } else if (typeof cachedData.json === "string") {
           // Legacy Firestore cache
           const parsed = JSON.parse(cachedData.json);
@@ -246,12 +251,14 @@ export const stravaGetActivityStreams = onCall(
         }
       }
       // Outdated cache — re-fetch
-      if (typeof cachedData.json === "string") {
-        console.log(`[stravaStreams] Cache missing segments for ${stravaActivityId}, re-fetching`);
-      } else {
-        console.log(`[stravaStreams] Old cache for ${stravaActivityId}, re-fetching`);
+      if (cached.exists) {
+        if (typeof cachedData.json === "string") {
+          console.log(`[stravaStreams] Cache missing segments for ${stravaActivityId}, re-fetching`);
+        } else {
+          console.log(`[stravaStreams] Old cache for ${stravaActivityId}, re-fetching`);
+        }
+        await cacheRef.delete();
       }
-      await cacheRef.delete();
     }
 
     const accessToken = await getValidAccessToken(uid);

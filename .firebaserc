@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "orider-1ce26"
+    "default": "orider-1ce26",
+    "dev": "orider-dev"
   }
 }

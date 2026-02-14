@@ -4,7 +4,7 @@ import { functions } from "../services/firebase";
 import type { MigrationScope } from "@shared/types";
 
 const STRAVA_CLIENT_ID = import.meta.env.VITE_STRAVA_CLIENT_ID;
-const REDIRECT_URI = "https://orider-1ce26.web.app/strava/callback";
+const REDIRECT_URI = `https://${import.meta.env.VITE_FIREBASE_PROJECT_ID}.web.app/strava/callback`;
 
 export function useStrava() {
   const [loading, setLoading] = useState(false);
