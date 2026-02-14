@@ -86,7 +86,7 @@ export default function Layout() {
     setNotifOpen(false);
     if (n.activityId) {
       navigate(`/activity/${n.activityId}`);
-    } else if (n.type === "follow") {
+    } else if (n.type === "follow" || n.type === "friend_request" || n.type === "friend_accept") {
       navigate(`/athlete/${n.fromUserId}`);
     }
   };
@@ -96,6 +96,8 @@ export default function Layout() {
       case "kudos": return "👍";
       case "comment": return "💬";
       case "follow": return "👤";
+      case "friend_request": return "🤝";
+      case "friend_accept": return "🤝";
       case "kom": return "👑";
       default: return "🔔";
     }
@@ -204,7 +206,7 @@ export default function Layout() {
                                 <span className="text-base mt-0.5">{notifIcon(n.type)}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-gray-700 dark:text-gray-200 line-clamp-2">{n.message}</p>
-                                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</span>
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(typeof n.createdAt === "number" ? n.createdAt : (n.createdAt as any)?.toMillis?.() ?? Date.now())}</span>
                                 </div>
                                 {!n.read && (
                                   <span className="w-2 h-2 bg-orange-500 rounded-full mt-1.5 shrink-0" />

@@ -68,7 +68,7 @@ export interface Comment {
 
 export interface Notification {
   id: string;
-  type: 'kudos' | 'comment' | 'follow' | 'group_invite' | 'kom';
+  type: 'kudos' | 'comment' | 'follow' | 'friend_request' | 'friend_accept' | 'group_invite' | 'kom';
   fromUserId: string;
   fromNickname: string;
   fromProfileImage: string | null;
@@ -161,13 +161,24 @@ export interface GroupRideParticipant {
   averageCadence: number | null;
 }
 
-// Follow
-export interface FollowRelation {
+// Friend (양방향)
+export interface FriendRelation {
   userId: string;
+  nickname: string;
+  profileImage: string | null;
+  friendCode: string | null;
+  createdAt: number;
+}
+
+export interface FriendRequest {
+  requesterId: string;
   nickname: string;
   profileImage: string | null;
   createdAt: number;
 }
+
+/** @deprecated Use FriendRelation instead */
+export type FollowRelation = FriendRelation;
 
 // Migration
 export type MigrationStatus = "NOT_STARTED" | "QUEUED" | "RUNNING" | "WAITING" | "PARTIAL_DONE" | "DONE" | "FAILED";

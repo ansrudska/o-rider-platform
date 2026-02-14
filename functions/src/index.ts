@@ -6,6 +6,13 @@ export { onActivityCreate } from "./activity";
 export { onKudosCreate, onKudosDelete } from "./kudos";
 export { onCommentCreate } from "./comment";
 export { onFollowCreate, onFollowDelete } from "./follow";
+export {
+  onFriendCreate,
+  onFriendDelete,
+  onFriendRequestCreate,
+  acceptFriendRequest,
+  addFriendByCode,
+} from "./friend";
 export { ensureUserProfile, updateDefaultVisibility } from "./auth";
 export {
   stravaExchangeToken,

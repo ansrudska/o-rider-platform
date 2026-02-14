@@ -37,13 +37,14 @@ async function fanOutToFollowers(
   // visibility가 private이면 팬아웃하지 않음
   if (activity.visibility === "private") return;
 
-  const followersSnap = await db
-    .collection("followers")
+  // friends/ 컬렉션은 양방향이므로 상호 확인 불필요
+  const friendsSnap = await db
+    .collection("friends")
     .doc(userId)
     .collection("users")
     .get();
 
-  if (followersSnap.empty) return;
+  if (friendsSnap.empty) return;
 
   const batch = db.batch();
   const feedEntry = {
@@ -54,22 +55,12 @@ async function fanOutToFollowers(
     type: activity.type,
   };
 
-  for (const followerDoc of followersSnap.docs) {
-    const followerId = followerDoc.id;
-
-    // friends visibility면 팔로우 관계 확인
-    if (activity.visibility === "friends") {
-      const isFollowing = await db
-        .collection("following")
-        .doc(userId)
-        .collection(followerId)
-        .get();
-      if (isFollowing.empty) continue;
-    }
+  for (const friendDoc of friendsSnap.docs) {
+    const friendId = friendDoc.id;
 
     const feedRef = db
       .collection("feed")
-      .doc(followerId)
+      .doc(friendId)
       .collection("activities")
       .doc(activityId);
     batch.set(feedRef, feedEntry);

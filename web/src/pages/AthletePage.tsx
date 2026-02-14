@@ -4,8 +4,9 @@ import {
   collection, query, where, orderBy, getDocs,
   doc, getDoc, setDoc, deleteDoc,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { ref, get } from "firebase/database";
-import { firestore, database } from "../services/firebase";
+import { firestore, database, functions } from "../services/firebase";
 import { useDocument } from "../hooks/useFirestore";
 import { useAuth } from "../contexts/AuthContext";
 import StatCard from "../components/StatCard";
@@ -32,11 +33,10 @@ export default function AthletePage() {
 
   const [friendCode, setFriendCode] = useState<string | null>(null);
 
-  // Follow state
-  const [following, setFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
-  const [followerCount, setFollowerCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
+  // Friend state: 'none' | 'request_sent' | 'request_received' | 'friends'
+  const [friendStatus, setFriendStatus] = useState<"none" | "request_sent" | "request_received" | "friends">("none");
+  const [friendLoading, setFriendLoading] = useState(false);
+  const [friendCount, setFriendCount] = useState(0);
 
   // Activity filter
   const [filterType, setFilterType] = useState<"all" | "ride" | "strava">("all");
@@ -67,51 +67,100 @@ export default function AthletePage() {
       .finally(() => setActivitiesLoading(false));
   }, [userId]);
 
-  // Check if current user follows this profile
+  // Check friend relationship
   useEffect(() => {
     if (!currentUser || !userId || currentUser.uid === userId) return;
 
-    getDoc(doc(firestore, "following", currentUser.uid, "users", userId))
-      .then((snap) => setFollowing(snap.exists()))
+    // 1. 이미 친구인지 확인
+    getDoc(doc(firestore, "friends", currentUser.uid, "users", userId))
+      .then((snap) => {
+        if (snap.exists()) {
+          setFriendStatus("friends");
+          return;
+        }
+        // 2. 내가 요청을 보냈는지 확인
+        return getDoc(doc(firestore, "friend_requests", userId, "items", currentUser.uid))
+          .then((reqSnap) => {
+            if (reqSnap.exists()) {
+              setFriendStatus("request_sent");
+              return;
+            }
+            // 3. 상대가 나에게 요청을 보냈는지 확인
+            return getDoc(doc(firestore, "friend_requests", currentUser.uid, "items", userId))
+              .then((recvSnap) => {
+                setFriendStatus(recvSnap.exists() ? "request_received" : "none");
+              });
+          });
+      })
       .catch(() => {});
   }, [currentUser, userId]);
 
-  // Fetch follower / following counts
+  // Fetch friend count
   useEffect(() => {
     if (!userId) return;
 
-    getDocs(collection(firestore, "followers", userId, "users"))
-      .then((snap) => setFollowerCount(snap.size))
-      .catch(() => {});
-    getDocs(collection(firestore, "following", userId, "users"))
-      .then((snap) => setFollowingCount(snap.size))
+    getDocs(collection(firestore, "friends", userId, "users"))
+      .then((snap) => setFriendCount(snap.size))
       .catch(() => {});
   }, [userId]);
 
-  const handleToggleFollow = async () => {
-    if (!currentUser || !userId || followLoading) return;
-
-    setFollowLoading(true);
-    const ref = doc(firestore, "following", currentUser.uid, "users", userId);
+  const handleSendFriendRequest = async () => {
+    if (!currentUser || !userId || friendLoading) return;
+    setFriendLoading(true);
     try {
-      if (following) {
-        await deleteDoc(ref);
-        setFollowing(false);
-        setFollowerCount((c) => Math.max(0, c - 1));
-      } else {
-        await setDoc(ref, {
-          userId: currentUser.uid,
-          nickname: currentProfile?.nickname || currentUser.displayName || "",
-          profileImage: currentProfile?.photoURL || currentUser.photoURL || null,
-          createdAt: Date.now(),
-        });
-        setFollowing(true);
-        setFollowerCount((c) => c + 1);
-      }
+      await setDoc(doc(firestore, "friend_requests", userId, "items", currentUser.uid), {
+        requesterId: currentUser.uid,
+        nickname: currentProfile?.nickname || currentUser.displayName || "",
+        profileImage: currentProfile?.photoURL || currentUser.photoURL || null,
+        createdAt: Date.now(),
+      });
+      setFriendStatus("request_sent");
     } catch (err) {
-      console.error("Follow toggle failed:", err);
+      console.error("Friend request failed:", err);
     } finally {
-      setFollowLoading(false);
+      setFriendLoading(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!currentUser || !userId || friendLoading) return;
+    setFriendLoading(true);
+    try {
+      await deleteDoc(doc(firestore, "friend_requests", userId, "items", currentUser.uid));
+      setFriendStatus("none");
+    } catch (err) {
+      console.error("Cancel request failed:", err);
+    } finally {
+      setFriendLoading(false);
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!currentUser || !userId || friendLoading) return;
+    setFriendLoading(true);
+    try {
+      const accept = httpsCallable(functions, "acceptFriendRequest");
+      await accept({ requesterId: userId });
+      setFriendStatus("friends");
+      setFriendCount((c) => c + 1);
+    } catch (err) {
+      console.error("Accept request failed:", err);
+    } finally {
+      setFriendLoading(false);
+    }
+  };
+
+  const handleRemoveFriend = async () => {
+    if (!currentUser || !userId || friendLoading) return;
+    setFriendLoading(true);
+    try {
+      await deleteDoc(doc(firestore, "friends", currentUser.uid, "users", userId));
+      setFriendStatus("none");
+      setFriendCount((c) => Math.max(0, c - 1));
+    } catch (err) {
+      console.error("Remove friend failed:", err);
+    } finally {
+      setFriendLoading(false);
     }
   };
 
@@ -228,22 +277,48 @@ export default function AthletePage() {
             {friendCode && <span className="text-sm font-normal text-blue-500 ml-2">({friendCode})</span>}
           </h1>
           <div className="flex gap-4 mt-2 text-sm text-gray-600 dark:text-gray-300">
-            <span><strong className="text-gray-900 dark:text-gray-50">{followerCount}</strong> 팔로워</span>
-            <span><strong className="text-gray-900 dark:text-gray-50">{followingCount}</strong> 팔로잉</span>
+            <span><strong className="text-gray-900 dark:text-gray-50">{friendCount}</strong> 친구</span>
           </div>
         </div>
         {!isMe && currentUser && (
-          <button
-            onClick={handleToggleFollow}
-            disabled={followLoading}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-              following
-                ? "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                : "bg-orange-500 text-white hover:bg-orange-600"
-            } disabled:opacity-50`}
-          >
-            {followLoading ? "..." : following ? "팔로잉" : "팔로우"}
-          </button>
+          <div className="flex gap-2">
+            {friendStatus === "none" && (
+              <button
+                onClick={handleSendFriendRequest}
+                disabled={friendLoading}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
+              >
+                {friendLoading ? "..." : "친구 요청"}
+              </button>
+            )}
+            {friendStatus === "request_sent" && (
+              <button
+                onClick={handleCancelRequest}
+                disabled={friendLoading}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                {friendLoading ? "..." : "요청 취소"}
+              </button>
+            )}
+            {friendStatus === "request_received" && (
+              <button
+                onClick={handleAcceptRequest}
+                disabled={friendLoading}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
+              >
+                {friendLoading ? "..." : "수락"}
+              </button>
+            )}
+            {friendStatus === "friends" && (
+              <button
+                onClick={handleRemoveFriend}
+                disabled={friendLoading}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                {friendLoading ? "..." : "친구"}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
