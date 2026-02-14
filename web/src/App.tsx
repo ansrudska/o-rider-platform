@@ -11,6 +11,8 @@ import StravaCallbackPage from "./pages/StravaCallbackPage";
 import SettingsPage from "./pages/SettingsPage";
 import FriendsPage from "./pages/FriendsPage";
 import MigrationPage from "./pages/MigrationPage";
+import FeedbackPage from "./pages/FeedbackPage";
+import TermsPage from "./pages/TermsPage";
 
 export default function App() {
   return (
@@ -30,7 +32,10 @@ export default function App() {
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/migrate" element={<MigrationPage />} />
+        <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="/terms" element={<TermsPage />} />
       </Route>
     </Routes>
   );
 }
+

@@ -325,36 +325,36 @@ export default function AthletePage() {
               <button
                 onClick={handleSendFriendRequest}
                 disabled={friendLoading}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
+                className={`px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 ${friendLoading ? 'cursor-wait' : ''}`}
               >
-                {friendLoading ? "..." : "친구 요청"}
+                {friendLoading ? '요청 중...' : '친구 요청'}
               </button>
             )}
             {friendStatus === "request_sent" && (
               <button
                 onClick={handleCancelRequest}
                 disabled={friendLoading}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                className={`px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 ${friendLoading ? 'cursor-wait' : ''}`}
               >
-                {friendLoading ? "..." : "요청 취소"}
+                {friendLoading ? '취소 중...' : '요청 취소'}
               </button>
             )}
             {friendStatus === "request_received" && (
               <button
                 onClick={handleAcceptRequest}
                 disabled={friendLoading}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
+                className={`px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 ${friendLoading ? 'cursor-wait' : ''}`}
               >
-                {friendLoading ? "..." : "수락"}
+                {friendLoading ? '수락 중...' : '수락'}
               </button>
             )}
             {friendStatus === "friends" && (
               <button
                 onClick={() => handleRemoveFriend()}
                 disabled={friendLoading}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                className={`px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 ${friendLoading ? 'cursor-wait' : ''}`}
               >
-                {friendLoading ? "..." : "친구"}
+                {friendLoading ? '삭제 중...' : '친구'}
               </button>
             )}
           </div>
