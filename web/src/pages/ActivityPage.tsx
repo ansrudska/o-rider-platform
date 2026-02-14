@@ -108,7 +108,7 @@ const OVERLAY_CONFIGS: OverlayConfig[] = [
   { key: "speed", label: "속도", unit: "km/h", color: "rgba(59, 130, 246, 0.7)", dotColor: "#3b82f6", yAxisID: "ySpeed", getValue: (d) => d.speed },
   { key: "hr", label: "심박", unit: "bpm", color: "rgba(239, 68, 68, 0.7)", dotColor: "#ef4444", yAxisID: "yHR", getValue: (d) => d.heartRate },
   { key: "power", label: "파워", unit: "W", color: "rgba(168, 85, 247, 0.7)", dotColor: "#a855f7", yAxisID: "yPower", getValue: (d) => d.power },
-  { key: "cadence", label: "케이던스", unit: "rpm", color: "rgba(16, 185, 129, 0.7)", dotColor: "#10b981", yAxisID: "yCadence", getValue: (d) => d.cadence },
+  { key: "cadence", label: "케이던스", unit: "rpm", color: "rgba(6, 182, 212, 0.7)", dotColor: "#06b6d4", yAxisID: "yCadence", getValue: (d) => d.cadence },
 ];
 
 export default function ActivityPage() {
@@ -418,17 +418,7 @@ export default function ActivityPage() {
                   <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4" viewBox="0 0 200 200">
-                  <rect width="200" height="200" rx="40" fill="#26A69A"/>
-                  <path d="M0,168 L35,135 L65,152 L100,115 L135,140 L170,108 L200,135 L200,200 L0,200 Z" fill="#00695C"/>
-                  <g stroke="#FFFFFF" strokeWidth="18" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M30,150 L30,55"/>
-                    <path d="M30,55 L62,100 L95,55"/>
-                    <path d="M95,55 L95,150"/>
-                    <path d="M95,55 L130,55 Q158,55 158,82 Q158,108 130,108 L95,108"/>
-                    <path d="M125,108 L165,150"/>
-                  </g>
-                </svg>
+                <img src="/favicon.svg" alt="O-Rider" className="w-4 h-4" />
               )}
               {hasStreams && (
                 <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">GPS</span>
@@ -537,7 +527,6 @@ export default function ActivityPage() {
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">
             고도 {availableOverlays.length > 0 ? "& 성능 분석" : "프로파일"}
-            {hasStreams && <span className="ml-2 text-xs font-normal text-green-600">(실제 데이터)</span>}
           </h3>
 
           {/* Overlay toggle buttons */}

@@ -22,13 +22,6 @@ ChartJS.register(
   Legend,
 );
 
-function gradeColor(grade: number): string {
-  if (grade < 3) return "#22c55e";
-  if (grade < 6) return "#eab308";
-  if (grade < 10) return "#f97316";
-  return "#ef4444";
-}
-
 const crosshairPlugin: Plugin<"line"> = {
   id: "crosshair",
   beforeDraw(chart) {
@@ -107,16 +100,6 @@ export default function ElevationChart({
         pointHoverBorderWidth: 2,
         tension: 0.4,
         yAxisID: "yElev",
-        segment: {
-          borderColor: (ctx: { p0DataIndex: number; p1DataIndex: number }) => {
-            const d0 = data[ctx.p0DataIndex];
-            const d1 = data[ctx.p1DataIndex];
-            if (!d0 || !d1) return "#22c55e";
-            const dist = d1.distance - d0.distance;
-            if (dist <= 0) return "#22c55e";
-            return gradeColor(((d1.elevation - d0.elevation) / dist) * 100);
-          },
-        },
       },
       ...(overlays ?? []).map((o) => ({
         label: o.label,
