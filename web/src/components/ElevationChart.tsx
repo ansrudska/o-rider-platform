@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { Line } from "react-chartjs-2";
-import type { ChartEvent, ActiveElement, Chart } from "chart.js";
+import type { ChartEvent, ActiveElement, Chart, Plugin } from "chart.js";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -22,6 +22,35 @@ ChartJS.register(
   Legend,
 );
 
+function gradeColor(grade: number): string {
+  if (grade < 3) return "#22c55e";
+  if (grade < 6) return "#eab308";
+  if (grade < 10) return "#f97316";
+  return "#ef4444";
+}
+
+const crosshairPlugin: Plugin<"line"> = {
+  id: "crosshair",
+  beforeDraw(chart) {
+    const active = chart.getActiveElements();
+    const first = active[0];
+    if (!first) return;
+    const { x } = first.element;
+    const area = chart.chartArea;
+    if (!area) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, area.top);
+    ctx.lineTo(x, area.bottom);
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
 export interface OverlayDataset {
   label: string;
   data: number[];
@@ -34,7 +63,6 @@ interface ElevationChartProps {
   data: { distance: number; elevation: number }[];
   height?: number;
   onHoverIndex?: (index: number | null) => void;
-  /** Optional performance overlay datasets */
   overlays?: OverlayDataset[];
 }
 
@@ -45,7 +73,6 @@ export default function ElevationChart({
   overlays,
 }: ElevationChartProps) {
   const chartRef = useRef<Chart<"line">>(null);
-  const hasOverlays = overlays && overlays.length > 0;
 
   const handleHover = useCallback(
     (_event: ChartEvent, elements: ActiveElement[]) => {
@@ -67,11 +94,11 @@ export default function ElevationChart({
     labels: data.map((d) => `${(d.distance / 1000).toFixed(1)}`),
     datasets: [
       {
-        label: "고도 (m)",
+        label: "\uACE0\uB3C4 (m)",
         data: data.map((d) => d.elevation),
         fill: true,
-        backgroundColor: "rgba(34, 197, 94, 0.15)",
-        borderColor: "rgba(34, 197, 94, 0.8)",
+        backgroundColor: "rgba(34, 197, 94, 0.08)",
+        borderColor: "#22c55e",
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5,
@@ -80,6 +107,16 @@ export default function ElevationChart({
         pointHoverBorderWidth: 2,
         tension: 0.4,
         yAxisID: "yElev",
+        segment: {
+          borderColor: (ctx: { p0DataIndex: number; p1DataIndex: number }) => {
+            const d0 = data[ctx.p0DataIndex];
+            const d1 = data[ctx.p1DataIndex];
+            if (!d0 || !d1) return "#22c55e";
+            const dist = d1.distance - d0.distance;
+            if (dist <= 0) return "#22c55e";
+            return gradeColor(((d1.elevation - d0.elevation) / dist) * 100);
+          },
+        },
       },
       ...(overlays ?? []).map((o) => ({
         label: o.label,
@@ -112,24 +149,15 @@ export default function ElevationChart({
       <Line
         ref={chartRef}
         data={chartData}
+        plugins={[crosshairPlugin]}
         options={{
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           onHover: handleHover,
           plugins: {
-            tooltip: {
-              callbacks: {
-                label: (ctx) => {
-                  const val = Math.round(ctx.parsed?.y ?? 0);
-                  const ds = ctx.dataset as { label?: string };
-                  return `${ds.label ?? ""}: ${val}`;
-                },
-              },
-            },
-            legend: hasOverlays
-              ? { position: "bottom", labels: { font: { size: 10 }, padding: 12, usePointStyle: true } }
-              : { display: false },
+            tooltip: { enabled: false },
+            legend: { display: false },
           },
           scales: {
             x: {

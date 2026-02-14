@@ -94,6 +94,23 @@ interface SampledPoint {
   cadence: number;
 }
 
+interface OverlayConfig {
+  key: string;
+  label: string;
+  unit: string;
+  color: string;
+  dotColor: string;
+  yAxisID: string;
+  getValue: (d: SampledPoint) => number;
+}
+
+const OVERLAY_CONFIGS: OverlayConfig[] = [
+  { key: "speed", label: "속도", unit: "km/h", color: "rgba(59, 130, 246, 0.7)", dotColor: "#3b82f6", yAxisID: "ySpeed", getValue: (d) => d.speed },
+  { key: "hr", label: "심박", unit: "bpm", color: "rgba(239, 68, 68, 0.7)", dotColor: "#ef4444", yAxisID: "yHR", getValue: (d) => d.heartRate },
+  { key: "power", label: "파워", unit: "W", color: "rgba(168, 85, 247, 0.7)", dotColor: "#a855f7", yAxisID: "yPower", getValue: (d) => d.power },
+  { key: "cadence", label: "케이던스", unit: "rpm", color: "rgba(16, 185, 129, 0.7)", dotColor: "#10b981", yAxisID: "yCadence", getValue: (d) => d.cadence },
+];
+
 export default function ActivityPage() {
   const { activityId } = useParams<{ activityId: string }>();
   const navigate = useNavigate();
@@ -114,6 +131,7 @@ export default function ActivityPage() {
   const [editingText, setEditingText] = useState("");
   const [showAllResults, setShowAllResults] = useState(false);
   const [showAllSegments, setShowAllSegments] = useState(false);
+  const [activeOverlays, setActiveOverlays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!activityId) return;
@@ -247,6 +265,15 @@ export default function ActivityPage() {
     setHoverIndex(index);
   }, []);
 
+  const toggleOverlay = useCallback((key: string) => {
+    setActiveOverlays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   // Build sampled data from streams
   const sampledData: SampledPoint[] = useMemo(() => {
     if (!streams?.distance) return [];
@@ -267,6 +294,28 @@ export default function ActivityPage() {
     }
     return points;
   }, [streams]);
+
+  const availableOverlays = useMemo(() => {
+    if (sampledData.length === 0) return [] as OverlayConfig[];
+    return OVERLAY_CONFIGS.filter((cfg) => sampledData.some((d) => cfg.getValue(d) > 0));
+  }, [sampledData]);
+
+  const summaryStats = useMemo(() => {
+    if (sampledData.length === 0) return null;
+    const minElev = Math.min(...sampledData.map((d) => d.altitude));
+    const maxElev = Math.max(...sampledData.map((d) => d.altitude));
+    const stats: Record<string, { avg: number; max: number }> = {};
+    for (const cfg of OVERLAY_CONFIGS) {
+      const values = sampledData.map((d) => cfg.getValue(d)).filter((v) => v > 0);
+      if (values.length > 0) {
+        stats[cfg.key] = {
+          avg: values.reduce((a, b) => a + b, 0) / values.length,
+          max: Math.max(...values),
+        };
+      }
+    }
+    return { minElev, maxElev, overlays: stats };
+  }, [sampledData]);
 
   const markerPosition = useMemo(() => {
     if (hoverIndex == null || !sampledData[hoverIndex]) return null;
@@ -322,18 +371,18 @@ export default function ActivityPage() {
     ? sampledData.map((d) => ({ distance: d.distance, elevation: d.altitude }))
     : [];
 
-  // Performance overlays for combined chart
-  const overlays: OverlayDataset[] = [];
-  if (hasStreams) {
-    if (sampledData.some((d) => d.speed > 0))
-      overlays.push({ label: "속도 (km/h)", data: sampledData.map((d) => d.speed), color: "rgba(59, 130, 246, 0.7)", yAxisID: "ySpeed" });
-    if (sampledData.some((d) => d.heartRate > 0))
-      overlays.push({ label: "심박 (bpm)", data: sampledData.map((d) => d.heartRate), color: "rgba(239, 68, 68, 0.7)", yAxisID: "yHR" });
-    if (sampledData.some((d) => d.power > 0))
-      overlays.push({ label: "파워 (W)", data: sampledData.map((d) => d.power), color: "rgba(168, 85, 247, 0.7)", yAxisID: "yPower" });
-    if (sampledData.some((d) => d.cadence > 0))
-      overlays.push({ label: "케이던스 (rpm)", data: sampledData.map((d) => d.cadence), color: "rgba(16, 185, 129, 0.7)", yAxisID: "yCadence" });
-  }
+  // Build chart overlays from active toggles
+  const chartOverlays: OverlayDataset[] = availableOverlays
+    .filter((cfg) => activeOverlays.has(cfg.key))
+    .map((cfg) => ({
+      label: `${cfg.label} (${cfg.unit})`,
+      data: sampledData.map((d) => cfg.getValue(d)),
+      color: cfg.color,
+      yAxisID: cfg.yAxisID,
+      unit: cfg.unit,
+    }));
+
+  const hoverPoint = hoverIndex != null ? sampledData[hoverIndex] ?? null : null;
 
   const activityComments = commentsList;
   const activityKudos = kudosList;
@@ -473,7 +522,7 @@ export default function ActivityPage() {
       {showStreamSpinner && isStrava && (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">고도 & 성능 분석</h3>
-          <div className="h-[280px] flex items-center justify-center">
+          <div className="h-[320px] flex items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -487,15 +536,85 @@ export default function ActivityPage() {
       {elevData.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            고도 {overlays.length > 0 ? "& 성능 분석" : "프로파일"}
+            고도 {availableOverlays.length > 0 ? "& 성능 분석" : "프로파일"}
             {hasStreams && <span className="ml-2 text-xs font-normal text-green-600">(실제 데이터)</span>}
-            {hasStreams && <span className="ml-1 text-xs font-normal text-gray-400">— 차트 위 마우스 호버로 지도에서 위치 확인</span>}
           </h3>
+
+          {/* Overlay toggle buttons */}
+          {hasStreams && availableOverlays.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200 cursor-default">
+                <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                고도
+              </span>
+              {availableOverlays.map((cfg) => (
+                <button
+                  key={cfg.key}
+                  onClick={() => toggleOverlay(cfg.key)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                    activeOverlays.has(cfg.key)
+                      ? ""
+                      : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                  }`}
+                  style={activeOverlays.has(cfg.key) ? {
+                    color: cfg.dotColor,
+                    borderColor: cfg.dotColor,
+                    backgroundColor: `${cfg.dotColor}15`,
+                  } : undefined}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: activeOverlays.has(cfg.key) ? cfg.dotColor : "#9ca3af" }}
+                  />
+                  {cfg.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Hover data panel */}
+          {hasStreams && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mb-2 min-h-[20px] text-gray-600">
+              {hoverPoint ? (
+                <>
+                  <span className="font-medium text-gray-800">{(hoverPoint.distance / 1000).toFixed(1)} km</span>
+                  <span className="text-gray-300">|</span>
+                  <span style={{ color: "#16a34a" }}>고도 {Math.round(hoverPoint.altitude)}m</span>
+                  {availableOverlays.flatMap((cfg) => {
+                    if (!activeOverlays.has(cfg.key)) return [];
+                    const val = cfg.getValue(hoverPoint);
+                    if (val <= 0) return [];
+                    return [
+                      <span key={`${cfg.key}-sep`} className="text-gray-300">|</span>,
+                      <span key={cfg.key} style={{ color: cfg.dotColor }}>
+                        {cfg.label} {cfg.key === "speed" ? val.toFixed(1) : Math.round(val)} {cfg.unit}
+                      </span>,
+                    ];
+                  })}
+                </>
+              ) : summaryStats ? (
+                <>
+                  <span style={{ color: "#16a34a" }}>고도 {Math.round(summaryStats.minElev)} ~ {Math.round(summaryStats.maxElev)}m</span>
+                  {availableOverlays.flatMap((cfg) => {
+                    const stat = summaryStats.overlays[cfg.key];
+                    if (!stat || !activeOverlays.has(cfg.key)) return [];
+                    return [
+                      <span key={`${cfg.key}-sep`} className="text-gray-300">|</span>,
+                      <span key={cfg.key} style={{ color: cfg.dotColor }}>
+                        평균 {cfg.key === "speed" ? stat.avg.toFixed(1) : Math.round(stat.avg)} {cfg.unit}
+                      </span>,
+                    ];
+                  })}
+                </>
+              ) : null}
+            </div>
+          )}
+
           <ElevationChart
             data={elevData}
-            height={overlays.length > 0 ? 280 : 200}
+            height={chartOverlays.length > 0 ? 320 : 200}
             onHoverIndex={hasStreams ? handleElevHover : undefined}
-            overlays={overlays.length > 0 ? overlays : undefined}
+            overlays={chartOverlays.length > 0 ? chartOverlays : undefined}
           />
         </div>
       )}
