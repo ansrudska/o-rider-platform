@@ -8,7 +8,7 @@ import { getFunctions, type Functions } from "firebase/functions";
 let app: FirebaseApp;
 let _auth: Auth;
 let _firestore: Firestore;
-let _database: Database;
+let _database: Database | null = null;
 let _storage: FirebaseStorage;
 let _functions: Functions;
 
@@ -19,7 +19,9 @@ export async function initFirebase() {
   app = initializeApp(config);
   _auth = getAuth(app);
   _firestore = getFirestore(app);
-  _database = getDatabase(app);
+  if (config.databaseURL) {
+    _database = getDatabase(app);
+  }
   _storage = getStorage(app);
   _functions = getFunctions(app);
 }

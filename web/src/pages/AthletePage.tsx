@@ -42,7 +42,7 @@ export default function AthletePage() {
   const [filterType, setFilterType] = useState<"all" | "ride" | "strava">("all");
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !database) return;
     get(ref(database, `users/${userId}/friendCode`)).then((snap) => {
       if (snap.exists()) setFriendCode(snap.val());
     });

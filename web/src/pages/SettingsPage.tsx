@@ -26,7 +26,7 @@ export default function SettingsPage() {
   const [friendCode, setFriendCode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !database) return;
     get(ref(database, `users/${user.uid}/friendCode`)).then((snap) => {
       if (snap.exists()) setFriendCode(snap.val());
     });
