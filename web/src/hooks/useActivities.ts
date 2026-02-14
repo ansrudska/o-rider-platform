@@ -7,6 +7,7 @@ import {
   limit,
   onSnapshot,
   getDocs,
+  or,
   type QueryConstraint,
 } from "firebase/firestore";
 import { firestore } from "../services/firebase";
@@ -28,12 +29,15 @@ export function useActivities() {
 
     let q;
     if (user) {
-      // Logged in: own activities (Strava + O-Rider)
+      // Logged in: own activities + public activities from others
       q = query(
         collection(firestore, "activities"),
-        where("userId", "==", user.uid),
+        or(
+          where("userId", "==", user.uid),
+          where("visibility", "==", "everyone"),
+        ),
         orderBy("createdAt", "desc"),
-        limit(500),
+        limit(200),
       );
     } else {
       // Not logged in: public activities from everyone
