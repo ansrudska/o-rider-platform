@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
-import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
-import { ref, get } from "firebase/database";
-import { firestore, database, functions } from "../services/firebase";
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
+import { firestore, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useStrava } from "../hooks/useStrava";
@@ -26,9 +25,12 @@ export default function SettingsPage() {
   const [friendCode, setFriendCode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || !database) return;
-    get(ref(database, `users/${user.uid}/friendCode`)).then((snap) => {
-      if (snap.exists()) setFriendCode(snap.val());
+    if (!user) return;
+    getDoc(doc(firestore, "users", user.uid)).then((snap) => {
+      if (snap.exists()) {
+        const code = snap.data()?.friendCode;
+        if (code) setFriendCode(code);
+      }
     });
   }, [user]);
 

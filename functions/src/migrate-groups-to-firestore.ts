@@ -16,17 +16,9 @@
 
 import * as admin from "firebase-admin";
 
-// 서비스 계정 키 경로 (환경에 맞게 수정)
-const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-if (!serviceAccountPath) {
-  console.error("GOOGLE_APPLICATION_CREDENTIALS 환경변수를 설정하세요.");
-  console.error("export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json");
-  process.exit(1);
-}
-
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
-  databaseURL: "https://orider-1ce26-default-rtdb.firebaseio.com",
+  databaseURL: "https://orider-1ce26-default-rtdb.asia-southeast1.firebasedatabase.app",
 });
 
 const db = admin.database();

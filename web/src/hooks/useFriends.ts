@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  collection, doc, onSnapshot, deleteDoc, setDoc,
+  collection, doc, getDoc, onSnapshot, deleteDoc, setDoc,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { ref, get } from "firebase/database";
-import { firestore, functions, database } from "../services/firebase";
+import { firestore, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import type { FriendRelation, FriendRequest } from "@shared/types";
 
@@ -74,11 +73,14 @@ export function useFriends() {
     );
   }, [user]);
 
-  // Fetch friend code from RTDB
+  // Fetch friend code from Firestore
   useEffect(() => {
-    if (!user || !database) return;
-    get(ref(database, `users/${user.uid}/friendCode`)).then((snap) => {
-      if (snap.exists()) setFriendCode(snap.val());
+    if (!user) return;
+    getDoc(doc(firestore, "users", user.uid)).then((snap) => {
+      if (snap.exists()) {
+        const code = snap.data()?.friendCode;
+        if (code) setFriendCode(code);
+      }
     });
   }, [user]);
 

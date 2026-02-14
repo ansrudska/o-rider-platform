@@ -12,7 +12,6 @@ export {
   onFriendRequestCreate,
   acceptFriendRequest,
   addFriendByCode,
-  migrateFriendsFromRTDB,
 } from "./friend";
 export { ensureUserProfile, updateDefaultVisibility } from "./auth";
 export {
