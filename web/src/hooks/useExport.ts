@@ -332,17 +332,8 @@ export function useExport() {
       }
       const allPhotos: PhotoRef[] = [];
 
-      let activitiesWithPhotos = 0;
       for (const a of activities) {
         const stream = streamMap.get(a.id);
-        if (a.photoCount > 0) {
-          activitiesWithPhotos++;
-          if (!stream) {
-            console.log(`[export] photoCount=${a.photoCount} but no stream: ${a.id}`);
-          } else if (!stream.photos || stream.photos.length === 0) {
-            console.log(`[export] photoCount=${a.photoCount} but stream has no photos: ${a.id}`);
-          }
-        }
         if (stream?.photos) {
           stream.photos.forEach((p, i) => {
             if (p.url) {
@@ -351,11 +342,8 @@ export function useExport() {
           });
         }
       }
-      console.log(`[export] photoCount>0인 활동: ${activitiesWithPhotos}개, 수집된 사진: ${allPhotos.length}개`);
 
-      const photoDataMap = new Map<string, { data: string; ext: string }>();
-
-      console.log(`[export] 사진 ${allPhotos.length}개 발견, 샘플 URL:`, allPhotos.slice(0, 3).map((p) => p.photo.url));
+      const photoDataMap = new Map<string, { data: Uint8Array; ext: string }>();
 
       if (allPhotos.length > 0) {
         for (let i = 0; i < allPhotos.length; i += 5) {
@@ -371,7 +359,7 @@ export function useExport() {
             batch.map(async (ref) => {
               const url = ref.photo.url!;
               try {
-                let data: string;
+                let data: Uint8Array;
                 let ext: string;
                 if (url.includes("firebasestorage.googleapis.com")) {
                   // GCS-stored photo: fetch directly (no proxy needed)
@@ -379,13 +367,14 @@ export function useExport() {
                   if (!resp.ok) throw new Error(`Photo fetch failed: ${resp.status}`);
                   const contentType = resp.headers.get("content-type") ?? "image/jpeg";
                   ext = contentType.includes("png") ? "png" : "jpg";
-                  const buffer = await resp.arrayBuffer();
-                  data = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                  data = new Uint8Array(await resp.arrayBuffer());
                 } else {
-                  // Legacy Strava CDN URL: use proxy
+                  // Legacy Strava CDN URL: use proxy (returns base64)
                   const result = await proxyPhotoDownload({ url });
                   ext = result.data.contentType.includes("png") ? "png" : "jpg";
-                  data = result.data.data;
+                  const binary = atob(result.data.data);
+                  data = new Uint8Array(binary.length);
+                  for (let j = 0; j < binary.length; j++) data[j] = binary.charCodeAt(j);
                 }
                 return { key: `${ref.activityId}_${ref.index}`, data, ext };
               } catch (e) {
@@ -474,7 +463,7 @@ export function useExport() {
             const photoKey = `${a.id}_${i}`;
             const photoData = photoDataMap.get(photoKey);
             if (photoData) {
-              photosFolder.file(`photo_${i + 1}.${photoData.ext}`, photoData.data, { base64: true });
+              photosFolder.file(`photo_${i + 1}.${photoData.ext}`, photoData.data);
             } else if (p.url) {
               // Include URL reference if download failed
               const refFolder = photosFolder;
@@ -495,18 +484,20 @@ export function useExport() {
       socialFolder.file("following.json", JSON.stringify(following, null, 2));
       socialFolder.file("followers.json", JSON.stringify(followers, null, 2));
 
-      // Generate and download
+      // Generate ZIP → 자동 다운로드
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      const fileName = `orider-export-${dateStr}.zip`;
+      const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `orider-export-${dateStr}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
 
-      setProgress({ phase: "zip", current: 1, total: 1, label: "다운로드 완료!" });
+      setProgress({ phase: "zip", current: 1, total: 1, label: `다운로드 완료! (${sizeMB} MB)` });
     } catch (e) {
       setError(e instanceof Error ? e.message : "내보내기 실패");
     } finally {

@@ -9,6 +9,7 @@ import AthletePage from "./pages/AthletePage";
 import ExplorePage from "./pages/ExplorePage";
 import StravaCallbackPage from "./pages/StravaCallbackPage";
 import SettingsPage from "./pages/SettingsPage";
+import FriendsPage from "./pages/FriendsPage";
 import MigrationPage from "./pages/MigrationPage";
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/athlete/:userId" element={<AthletePage />} />
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/strava/callback" element={<StravaCallbackPage />} />
+        <Route path="/friends" element={<FriendsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/migrate" element={<MigrationPage />} />
       </Route>

@@ -3,13 +3,11 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 const db = admin.firestore();
-const rtdb = admin.database();
 
 /**
  * 친구 관계 생성 시:
  * 1. 역방향 친구 관계 자동 생성 (양방향)
- * 2. RTDB /friends/ 동기화
- * 3. 알림 발송
+ * 2. 알림 발송
  */
 export const onFriendCreate = onDocumentCreated(
   "friends/{userA}/users/{userB}",
@@ -29,7 +27,6 @@ export const onFriendCreate = onDocumentCreated(
     const reverseSnap = await reverseRef.get();
 
     if (!reverseSnap.exists) {
-      // 역방향 자동 생성
       const userAProfile = await db.doc(`users/${userA}`).get();
       const profileData = userAProfile.data();
       await reverseRef.set({
@@ -41,14 +38,7 @@ export const onFriendCreate = onDocumentCreated(
       });
     }
 
-    // 2. RTDB 동기화
-    const now = Date.now();
-    await rtdb.ref().update({
-      [`/friends/${userA}/${userB}`]: { addedAt: now },
-      [`/friends/${userB}/${userA}`]: { addedAt: now },
-    });
-
-    // 3. 상대에게 알림
+    // 2. 상대에게 알림
     await db
       .collection("notifications")
       .doc(userB)
@@ -68,16 +58,13 @@ export const onFriendCreate = onDocumentCreated(
 );
 
 /**
- * 친구 관계 삭제 시:
- * 1. 역방향 삭제
- * 2. RTDB 동기화
+ * 친구 관계 삭제 시: 역방향 삭제
  */
 export const onFriendDelete = onDocumentDeleted(
   "friends/{userA}/users/{userB}",
   async (event) => {
     const { userA, userB } = event.params;
 
-    // 1. 역방향 삭제 (이미 삭제됐으면 무시)
     const reverseRef = db
       .collection("friends")
       .doc(userB)
@@ -87,12 +74,6 @@ export const onFriendDelete = onDocumentDeleted(
     if (reverseSnap.exists) {
       await reverseRef.delete();
     }
-
-    // 2. RTDB 동기화
-    await rtdb.ref().update({
-      [`/friends/${userA}/${userB}`]: null,
-      [`/friends/${userB}/${userA}`]: null,
-    });
   }
 );
 
@@ -166,7 +147,7 @@ export const acceptFriendRequest = onCall(async (request) => {
   const myProfile = await db.doc(`users/${myUid}`).get();
   const myData = myProfile.data();
 
-  // 친구 관계 생성 (onFriendCreate가 양방향 + RTDB 동기화)
+  // 친구 관계 생성 (onFriendCreate가 양방향 처리)
   await db
     .collection("friends")
     .doc(myUid)
@@ -203,7 +184,7 @@ export const acceptFriendRequest = onCall(async (request) => {
 
 /**
  * 친구코드로 친구 추가 (callable)
- * - Firestore users/ 에서 friendCode 조회 (없으면 RTDB /users/ 조회)
+ * - Firestore users/ 에서 friendCode 조회
  * - friends/{me}/users/{target} 생성 → onFriendCreate가 양방향 처리
  */
 export const addFriendByCode = onCall(async (request) => {
@@ -214,21 +195,18 @@ export const addFriendByCode = onCall(async (request) => {
 
   const myUid = request.auth.uid;
 
-  // RTDB /users/에서 friendCode로 검색
-  const usersSnap = await rtdb.ref("users").orderByChild("friendCode").equalTo(friendCode).once("value");
+  // Firestore users/에서 friendCode로 검색
+  const usersSnap = await db
+    .collection("users")
+    .where("friendCode", "==", friendCode)
+    .limit(1)
+    .get();
 
-  if (!usersSnap.exists()) {
+  if (usersSnap.empty) {
     throw new HttpsError("not-found", "해당 친구코드의 사용자를 찾을 수 없습니다.");
   }
 
-  let targetUid: string | null = null;
-  usersSnap.forEach((child) => {
-    targetUid = child.key;
-  });
-
-  if (!targetUid) {
-    throw new HttpsError("not-found", "해당 친구코드의 사용자를 찾을 수 없습니다.");
-  }
+  const targetUid = usersSnap.docs[0].id;
 
   if (targetUid === myUid) {
     throw new HttpsError("invalid-argument", "자기 자신을 친구로 추가할 수 없습니다.");
@@ -249,7 +227,7 @@ export const addFriendByCode = onCall(async (request) => {
   const targetProfile = await db.doc(`users/${targetUid}`).get();
   const targetData = targetProfile.data();
 
-  // 친구 관계 생성 (onFriendCreate가 양방향 + RTDB 동기화)
+  // 친구 관계 생성 (onFriendCreate가 양방향 처리)
   await db
     .collection("friends")
     .doc(myUid)
@@ -269,3 +247,4 @@ export const addFriendByCode = onCall(async (request) => {
     friendNickname: targetData?.nickname || "",
   };
 });
+

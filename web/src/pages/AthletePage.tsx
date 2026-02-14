@@ -5,9 +5,9 @@ import {
   doc, getDoc, setDoc, deleteDoc,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { ref, get } from "firebase/database";
+
 import { useToast } from "../contexts/ToastContext";
-import { firestore, database, functions } from "../services/firebase";
+import { firestore, functions } from "../services/firebase";
 import { useDocument } from "../hooks/useFirestore";
 import { useAuth } from "../contexts/AuthContext";
 import StatCard from "../components/StatCard";
@@ -49,9 +49,12 @@ export default function AthletePage() {
   const [filterType, setFilterType] = useState<"all" | "ride" | "strava">("all");
 
   useEffect(() => {
-    if (!userId || !database) return;
-    get(ref(database, `users/${userId}/friendCode`)).then((snap) => {
-      if (snap.exists()) setFriendCode(snap.val());
+    if (!userId) return;
+    getDoc(doc(firestore, "users", userId)).then((snap) => {
+      if (snap.exists()) {
+        const code = snap.data()?.friendCode;
+        if (code) setFriendCode(code);
+      }
     });
   }, [userId]);
 
