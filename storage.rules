@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Photos: public read (URLs contain unguessable tokens, only shared via authenticated streams API)
+    match /photos/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+    // Streams: only server reads/writes
+    match /streams/{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

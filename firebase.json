@@ -17,6 +17,9 @@
       "predeploy": []
     }
   ],
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "public": "web/dist",
     "ignore": [

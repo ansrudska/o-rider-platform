@@ -226,6 +226,32 @@ export const stravaGetActivityStreams = onCall(
     const { stravaActivityId } = request.data as { stravaActivityId: number };
     if (!stravaActivityId) throw new HttpsError("invalid-argument", "stravaActivityId required");
 
+    // Look up activity to determine owner and visibility
+    const activityDocId = `strava_${stravaActivityId}`;
+    const activityDoc = await db.doc(`activities/${activityDocId}`).get();
+    const activityData = activityDoc.exists ? activityDoc.data() : null;
+    const ownerId = activityData?.userId as string | undefined;
+    const isOwner = ownerId === uid;
+
+    // Access control based on visibility
+    if (!isOwner && activityData) {
+      const visibility = (activityData.visibility as string) ?? "everyone";
+      if (visibility === "private") {
+        throw new HttpsError("permission-denied", "This activity is private");
+      }
+      if (visibility === "friends") {
+        // Check mutual follow: viewer follows owner AND owner follows viewer
+        const [viewerFollows, ownerFollows] = await Promise.all([
+          db.doc(`following/${uid}/users/${ownerId}`).get(),
+          db.doc(`following/${ownerId}/users/${uid}`).get(),
+        ]);
+        if (!viewerFollows.exists || !ownerFollows.exists) {
+          throw new HttpsError("permission-denied", "This activity is visible to friends only");
+        }
+      }
+      // "everyone" → allow
+    }
+
     // Check cache
     const cacheDocId = `strava_${stravaActivityId}`;
     const cacheRef = db.doc(`activity_streams/${cacheDocId}`);
@@ -261,11 +287,13 @@ export const stravaGetActivityStreams = onCall(
       }
     }
 
-    const accessToken = await getValidAccessToken(uid);
+    // Use owner's Strava token for API calls (non-owner viewers need cached data)
+    const tokenUid = ownerId ?? uid;
+    const accessToken = await getValidAccessToken(tokenUid);
     const headers = { Authorization: `Bearer ${accessToken}` };
 
-    // Get user profile for effort records
-    const userDoc = await db.doc(`users/${uid}`).get();
+    // Get owner profile for effort records
+    const userDoc = await db.doc(`users/${tokenUid}`).get();
     const userDataForEfforts = userDoc.data();
     const nickname = userDataForEfforts?.nickname ?? "Rider";
     const profileImage: string | null = userDataForEfforts?.photoURL ?? null;

@@ -3,21 +3,25 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../services/firebase";
 import type { MigrationScope } from "@shared/types";
 
-const STRAVA_CLIENT_ID = import.meta.env.VITE_STRAVA_CLIENT_ID;
-const REDIRECT_URI = `https://${import.meta.env.VITE_FIREBASE_PROJECT_ID}.web.app/strava/callback`;
+const STRAVA_CLIENT_ID = "194266";
+const STRAVA_PROXY_REDIRECT_URI = "https://orider-strava.web.app/strava/callback";
 
 export function useStrava() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const connectStrava = (returnTo?: string) => {
-    const state = crypto.randomUUID();
-    sessionStorage.setItem("strava_state", state);
+    const nonce = crypto.randomUUID();
+    sessionStorage.setItem("strava_state", nonce);
     if (returnTo) sessionStorage.setItem("strava_return_to", returnTo);
+
+    // state = "returnOrigin|nonce" → 프록시가 파싱하여 원래 출처로 리다이렉트
+    const returnOrigin = window.location.origin;
+    const state = `${returnOrigin}|${nonce}`;
 
     const params = new URLSearchParams({
       client_id: STRAVA_CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: STRAVA_PROXY_REDIRECT_URI,
       response_type: "code",
       scope: "read,activity:read_all",
       state,
