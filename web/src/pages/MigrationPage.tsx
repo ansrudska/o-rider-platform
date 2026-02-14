@@ -27,6 +27,7 @@ export default function MigrationPage() {
     missingActivityCount: number;
     missingStreamCount: number;
   } | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const [includePhotos, setIncludePhotos] = useState(false);
   const [includeSegments, setIncludeSegments] = useState(false);
   const [fixIncludePhotos, setFixIncludePhotos] = useState(false);
@@ -83,11 +84,14 @@ export default function MigrationPage() {
 
   const handleVerify = async () => {
     setVerifyResult(null);
+    setVerifying(true);
     try {
       const result = await verifyMigration();
       setVerifyResult(result);
     } catch {
       // error is set in hook
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -431,9 +435,18 @@ export default function MigrationPage() {
                  {!verifyResult && (
                    <button
                      onClick={handleVerify}
-                     className="px-6 py-3 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                     disabled={verifying}
+                     className={`px-6 py-3 border-2 border-orange-500 text-orange-600 dark:text-orange-400 font-bold rounded-xl hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-60 ${verifying ? 'cursor-wait' : ''}`}
                    >
-                     혹시 빠진게 있나요?
+                     {verifying ? (
+                       <span className="flex items-center gap-2">
+                         <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                         </svg>
+                         확인 중...
+                       </span>
+                     ) : '누락된 활동 확인'}
                    </button>
                  )}
               </div>

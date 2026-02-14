@@ -25,8 +25,7 @@ function timeAgo(ts: number): string {
 
 const BASE_NAV_ITEMS = [
   { to: "/", label: "대시보드" },
-  { to: "/explore", label: "탐색" },
-  { to: "/friends", label: "친구" },
+  { to: "/explore", label: "리더보드" },
 ];
 
 export default function Layout() {
@@ -38,14 +37,9 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const migrationStatus = profile?.migration?.status;
-  const showMigrate = user && profile && profile.stravaConnected;
-  const migrationLabel = migrationStatus === "RUNNING" ? "복사 진행중" : "복사";
 
-  const NAV_ITEMS = [
-    ...BASE_NAV_ITEMS,
-    ...(showMigrate ? [{ to: "/migrate", label: migrationLabel }] : []),
-  ];
+
+  const NAV_ITEMS = BASE_NAV_ITEMS;
 
   // Real-time notification subscription
   useEffect(() => {
@@ -302,6 +296,7 @@ export default function Layout() {
                         >
                           내 프로필
                         </Link>
+
                         <Link
                           to="/settings"
                           className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -466,7 +461,7 @@ export default function Layout() {
             <svg className="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <span>탐색</span>
+            <span>리더보드</span>
           </NavLink>
 
           {/* Friends tab */}

@@ -43,7 +43,6 @@ export default function AthletePage() {
 
   // Friend list
   const [friends, setFriends] = useState<{ userId: string; nickname: string; profileImage: string | null }[]>([]);
-  const [friendsOpen, setFriendsOpen] = useState(false);
 
   // Activity filter
   const [filterType, setFilterType] = useState<"all" | "ride" | "strava">("all");
@@ -317,12 +316,7 @@ export default function AthletePage() {
             {friendCode && <span className="text-sm font-normal text-blue-500 ml-2">({friendCode})</span>}
           </h1>
           <div className="flex gap-4 mt-2 text-sm text-gray-600 dark:text-gray-300">
-            <button
-              onClick={() => setFriendsOpen(!friendsOpen)}
-              className="hover:text-orange-500 transition-colors"
-            >
-              <strong className="text-gray-900 dark:text-gray-50">{friendCount}</strong> 친구
-            </button>
+            {/* Friend count removed */}
           </div>
         </div>
         {!isMe && currentUser && (
@@ -392,101 +386,112 @@ export default function AthletePage() {
       </div>
 
       {/* Friend list */}
-      {friendsOpen && (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">친구 ({friendCount})</h3>
-            <button
-              onClick={() => setFriendsOpen(false)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          {friends.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
-              아직 친구가 없습니다.
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Left Column: Friends & Chart */}
+        <div className="space-y-6">
+          {/* Friends List (Always visible) */}
+          <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-50">친구 ({friendCount})</h3>
+              <Link to="/friends" className="text-xs text-orange-500 hover:text-orange-600 font-medium">
+                전체보기
+              </Link>
             </div>
-          ) : (
-            <div className="divide-y divide-gray-50 dark:divide-gray-800">
-              {friends.map((f) => (
-                <div key={f.userId} className="px-4 py-3 flex items-center gap-3">
-                  <Link to={`/athlete/${f.userId}`} className="flex items-center gap-3 flex-1 min-w-0">
-                    {f.profileImage ? (
-                      <img src={f.profileImage} alt="" className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <Avatar name={f.nickname} size="sm" />
-                    )}
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{f.nickname}</span>
-                  </Link>
-                  {isMe && (
-                    <button
-                      onClick={() => handleRemoveFriend(f.userId)}
-                      disabled={friendLoading}
-                      className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 shrink-0"
-                    >
-                      삭제
-                    </button>
-                  )}
+            
+            {/* Scrollable container for friends (max height for ~8 items) */}
+            <div className="max-h-[400px] overflow-y-auto">
+              {friends.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  아직 친구가 없습니다.
                 </div>
-              ))}
+              ) : (
+                <div className="divide-y divide-gray-50 dark:divide-gray-800">
+                  {friends.map((friend) => (
+                    <Link
+                      key={friend.userId}
+                      to={`/athlete/${friend.userId}`}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      {friend.profileImage ? (
+                        <img
+                          src={friend.profileImage}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover border border-gray-100 dark:border-gray-700"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <Avatar name={friend.nickname} size="sm" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">
+                          {friend.nickname}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
 
-      {/* Monthly activity trend chart */}
-      {monthlyStats.length > 1 && (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">월별 활동 추이</h3>
           <WeeklyChart data={monthlyStats} dataKey="distance" height={160} />
         </div>
-      )}
 
-      {/* Activity feed */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">최근 활동</h2>
-          <div className="flex gap-1">
-            {([
-              { id: "all" as const, label: "전체" },
-              { id: "strava" as const, label: "Strava" },
-              { id: "ride" as const, label: "직접 기록" },
-            ]).map((f) => (
+        {/* Right Column: Activities */}
+        <div className="md:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">최근 활동</h2>
+            <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
               <button
-                key={f.id}
-                onClick={() => setFilterType(f.id)}
-                className={`px-3 py-1 text-xs rounded-full font-medium transition-colors ${
-                  filterType === f.id
-                    ? "bg-orange-500 text-white"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                onClick={() => setFilterType("all")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  filterType === "all"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 shadow-sm"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                 }`}
               >
-                {f.label}
+                전체
               </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-4">
-          {activitiesLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
+              <button
+                onClick={() => setFilterType("ride")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  filterType === "ride"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 shadow-sm"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                직접 기록
+              </button>
+              <button
+                onClick={() => setFilterType("strava")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  filterType === "strava"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 shadow-sm"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                Strava
+              </button>
             </div>
-          ) : filteredActivities.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-              아직 활동이 없습니다.
-            </p>
-          ) : (
-            filteredActivities.map((activity) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                showMap={false}
-              />
-            ))
-          )}
+          </div>
+
+          <div className="max-h-[800px] overflow-y-auto pr-1 -mr-1 space-y-4">
+            {activitiesLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-white dark:bg-gray-900 h-40 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : filteredActivities.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                <p className="text-gray-500 dark:text-gray-400">활동 내역이 없습니다.</p>
+              </div>
+            ) : (
+              filteredActivities.map((activity) => (
+                <ActivityCard key={activity.id} activity={activity} />
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

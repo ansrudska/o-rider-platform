@@ -48,16 +48,27 @@ function deriveCategory(seg: SegmentData): "climb" | "flat" {
 export default function ExplorePage() {
   const { data: segments, loading } = useCollection<SegmentData>("segments");
   const [category, setCategory] = useState<Category>("all");
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [inputValue, setInputValue] = useState("");
 
   const filtered = useMemo(() => {
     return segments.filter((s) => {
       if (category !== "all" && deriveCategory(s) !== category) return false;
-      if (search && !s.name.toLowerCase().includes(search.toLowerCase()))
+      if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase()))
         return false;
       return true;
     });
-  }, [segments, category, search]);
+  }, [segments, category, searchQuery]);
+
+  const handleSearch = () => {
+    setSearchQuery(inputValue.trim());
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
 
   // Sort by elevation gain (descending) as a proxy for popularity
   const sorted = useMemo(
@@ -73,7 +84,7 @@ export default function ExplorePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">세그먼트 탐색</h1>
+        <h1 className="text-2xl font-bold">리더보드</h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
           세그먼트를 찾아보고 도전해보세요
         </p>
@@ -82,24 +93,30 @@ export default function ExplorePage() {
       {/* Search + filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+          <button
+            onClick={handleSearch}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </button>
           <input
             type="text"
-            placeholder="세그먼트 검색..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="세그먼트 검색... (Enter)"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           />
         </div>
