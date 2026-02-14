@@ -67,17 +67,7 @@ export default function ActivityCard({
                   <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
                 </svg>
               ) : (
-                <svg className="w-3.5 h-3.5" viewBox="0 0 200 200">
-                  <rect width="200" height="200" rx="40" fill="#26A69A"/>
-                  <path d="M0,168 L35,135 L65,152 L100,115 L135,140 L170,108 L200,135 L200,200 L0,200 Z" fill="#00695C"/>
-                  <g stroke="#FFFFFF" strokeWidth="18" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M30,150 L30,55"/>
-                    <path d="M30,55 L62,100 L95,55"/>
-                    <path d="M95,55 L95,150"/>
-                    <path d="M95,55 L130,55 Q158,55 158,82 Q158,108 130,108 L95,108"/>
-                    <path d="M125,108 L165,150"/>
-                  </g>
-                </svg>
+                <img src="/favicon.svg" alt="O-Rider" className="w-3.5 h-3.5" />
               )}
               <span className="text-xs text-gray-400">{timeAgo(activity.createdAt)}</span>
             </div>
