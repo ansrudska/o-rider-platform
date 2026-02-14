@@ -229,8 +229,9 @@ export default function HomePage() {
           </div>
 
           {/* Date filter (only when search results are shown) */}
+          {/* Date & Owner filters (only when search results are shown) */}
           {search.active && !search.loading && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={search.datePreset}
                 onChange={(e) => search.setDatePreset(e.target.value as DatePreset)}
@@ -240,7 +241,26 @@ export default function HomePage() {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <span className="text-xs text-gray-400 dark:text-gray-500">결과 내 필터</span>
+
+              {user && (
+                <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-0.5">
+                  {(["all", "friends", "me"] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => search.setOwnerPreset(type)}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                        search.ownerPreset === type
+                          ? "bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+                          : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      {{ all: "전체", friends: "친구", me: "본인" }[type]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">결과 내 필터</span>
             </div>
           )}
 

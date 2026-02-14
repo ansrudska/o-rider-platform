@@ -160,35 +160,62 @@ function getDateFrom(preset: DatePreset): number | null {
   }
 }
 
+import { useFriends } from "./useFriends";
+
+export type OwnerPreset = "all" | "friends" | "me";
+
+// ... (keep existing helper functions like getDateFrom)
+
 export function useActivitySearch() {
   const { user } = useAuth();
+  const { friends } = useFriends();
+  
   const [allActivities, setAllActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(false);
   const [searchedKeyword, setSearchedKeyword] = useState("");
+  
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [ownerPreset, setOwnerPreset] = useState<OwnerPreset>("all");
+  
   const [displayCount, setDisplayCount] = useState(20);
 
-  // Explicit search: fetches all activities once, then filters client-side
+  // Explicit search: fetches all relevant activities once
   const search = useCallback((keyword: string) => {
     const kw = keyword.trim();
     if (!kw) return;
 
     setActive(true);
     setSearchedKeyword(kw);
+    // Reset filters
     setDatePreset("all");
+    setOwnerPreset("all");
     setDisplayCount(20);
 
     // Only re-fetch if we don't have cached data
     if (allActivities.length > 0) return;
 
     setLoading(true);
-    const constraints: QueryConstraint[] = user
-      ? [where("userId", "==", user.uid)]
-      : [where("visibility", "==", "everyone")];
+    
+    // Search Scope:
+    // If logged in: My activities + Public activities (Everyone)
+    // If guest: Public activities only
+    const constraints: any[] = [];
+    
+    if (user) {
+      constraints.push(or(
+        where("userId", "==", user.uid),
+        where("visibility", "==", "everyone")
+      ));
+    } else {
+      constraints.push(where("visibility", "==", "everyone"));
+    }
+    
     constraints.push(orderBy("startTime", "desc"));
 
-    const q = query(collection(firestore, "activities"), ...constraints);
+    // We fetch a larger batch for client-side filtering
+    // Limiting to 500 to avoid excessive reads, assuming search is refined by client filters
+    const q = query(collection(firestore, "activities"), ...constraints, limit(500));
 
     getDocs(q).then((snap) => {
       setAllActivities(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Activity));
@@ -203,21 +230,35 @@ export function useActivitySearch() {
   // Reset displayCount when filters change
   useEffect(() => {
     setDisplayCount(20);
-  }, [searchedKeyword, datePreset]);
+  }, [searchedKeyword, datePreset, ownerPreset]);
 
-  // Filter: keyword + date (both client-side on cached data)
+  // Filter: keyword + date + owner
   const results = useMemo(() => {
     if (!active) return [];
+    
     const kw = searchedKeyword.toLowerCase();
     let filtered = allActivities.filter(
       (a) => a.description?.toLowerCase().includes(kw) || a.nickname?.toLowerCase().includes(kw),
     );
+
+    // Date Filter
     const dateFrom = getDateFrom(datePreset);
     if (dateFrom !== null) {
       filtered = filtered.filter((a) => a.startTime >= dateFrom);
     }
+
+    // Owner Filter
+    if (user && ownerPreset !== "all") {
+      if (ownerPreset === "me") {
+        filtered = filtered.filter((a) => a.userId === user.uid);
+      } else if (ownerPreset === "friends") {
+        const friendIds = new Set(friends.map(f => f.userId));
+        filtered = filtered.filter((a) => friendIds.has(a.userId));
+      }
+    }
+
     return filtered;
-  }, [active, searchedKeyword, allActivities, datePreset]);
+  }, [active, searchedKeyword, allActivities, datePreset, ownerPreset, user, friends]);
 
   const loadMore = useCallback(() => setDisplayCount((prev) => prev + 20), []);
   const hasMore = displayCount < results.length;
@@ -226,6 +267,7 @@ export function useActivitySearch() {
     setActive(false);
     setSearchedKeyword("");
     setDatePreset("all");
+    setOwnerPreset("all");
     setAllActivities([]);
   }, []);
 
@@ -233,6 +275,8 @@ export function useActivitySearch() {
     search,
     datePreset,
     setDatePreset,
+    ownerPreset,
+    setOwnerPreset,
     results: results.slice(0, displayCount),
     totalResults: results.length,
     loading,

@@ -36,9 +36,56 @@ function formatDate(timestamp: number): string {
     month: "long",
     day: "numeric",
     weekday: "short",
-    hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// Mock Achievement Types
+type AchievementType = "PR" | "KOM" | "2nd" | "3rd";
+
+interface Achievement {
+  type: AchievementType;
+  segmentName: string;
+  time?: string;
+}
+
+// Mock Data Generator (Deterministic based on activity ID)
+function getMockAchievements(activityId: string): Achievement[] {
+  const hash = activityId.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
+  const count = hash % 4; // 0 to 3 achievements
+  
+  if (count === 0) return [];
+
+  const segments = ["남산 업힐", "북악 스카이웨이", "반포 잠수교", "탄천 합수부", "하트코스"];
+  const types: AchievementType[] = ["PR", "KOM", "2nd", "3rd"];
+  
+  return Array.from({ length: count }).map((_, i) => ({
+    type: types[(hash + i) % types.length],
+    segmentName: segments[(hash + i) % segments.length],
+    time: `${Math.floor(5 + i)}:${Math.floor(10 + i * 5)}`,
+  }));
+}
+
+function AchievementBadge({ type }: { type: AchievementType }) {
+  const styles = {
+    PR: "bg-orange-100 text-orange-700 border-orange-200",
+    KOM: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    "2nd": "bg-gray-100 text-gray-700 border-gray-200",
+    "3rd": "bg-amber-50 text-amber-700 border-amber-100",
+  };
+
+  const icons = {
+    PR: "🥇 PR",
+    KOM: "👑 KOM",
+    "2nd": "🥈 2nd",
+    "3rd": "🥉 3rd",
+  };
+
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${styles[type]}`}>
+      {icons[type]}
+    </span>
+  );
 }
 
 export default function ActivityCard({
@@ -51,6 +98,14 @@ export default function ActivityCard({
   const { showToast } = useToast();
   const [liked, setLiked] = useState(false);
   const [localKudos, setLocalKudos] = useState(activity.kudosCount);
+
+  // Generate mock achievements
+  const achievements = getMockAchievements(activity.id).sort((a, b) => {
+    const priority: Record<AchievementType, number> = { KOM: 4, PR: 3, "2nd": 2, "3rd": 1 };
+    return priority[b.type] - priority[a.type];
+  });
+  const prCount = achievements.filter(a => a.type === "PR").length;
+  const komCount = achievements.filter(a => a.type === "KOM").length;
 
   const handleToggleKudos = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -105,48 +160,78 @@ export default function ActivityCard({
           </div>
         </div>
         {/* Title */}
-        <Link
-          to={`/activity/${activity.id}`}
-          className="text-base font-bold text-gray-900 dark:text-gray-50 hover:text-orange-600 transition-colors block mt-2"
-        >
-          {activity.description || "라이딩"}
-        </Link>
+        {/* Title & Badges */}
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <Link
+            to={`/activity/${activity.id}`}
+            className="text-base font-bold text-gray-900 dark:text-gray-50 hover:text-orange-600 transition-colors"
+          >
+            {activity.description || "라이딩"}
+          </Link>
+          {/* Inline Badges */}
+          {(prCount > 0 || komCount > 0) && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {komCount > 0 && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">👑 KOM</span>}
+              {prCount > 0 && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200">🥇 PR {prCount}</span>}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Stats row */}
-      <div className="px-4 pb-3">
-        <div className="flex gap-6 text-sm">
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">거리</span>
-            <span className="ml-1.5 font-semibold">{(s.distance / 1000).toFixed(1)} km</span>
+      {/* Stats row & Segments (Side by Side) */}
+      <div className="px-4 pb-3 flex gap-4">
+        {/* Left: Stats */}
+        <div className="flex-1 min-w-0">
+          <div className="flex gap-6 text-sm">
+            <div>
+              <span className="text-gray-500 dark:text-gray-400">거리</span>
+              <span className="ml-1.5 font-semibold">{(s.distance / 1000).toFixed(1)} km</span>
+            </div>
+            <div>
+              <span className="text-gray-500 dark:text-gray-400">획득고도</span>
+              <span className="ml-1.5 font-semibold">{Math.round(s.elevationGain)} m</span>
+            </div>
+            <div>
+              <span className="text-gray-500 dark:text-gray-400">시간</span>
+              <span className="ml-1.5 font-semibold">{formatDuration(s.ridingTimeMillis)}</span>
+            </div>
           </div>
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">획득고도</span>
-            <span className="ml-1.5 font-semibold">{Math.round(s.elevationGain)} m</span>
-          </div>
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">시간</span>
-            <span className="ml-1.5 font-semibold">{formatDuration(s.ridingTimeMillis)}</span>
+          <div className="flex gap-6 text-sm mt-1">
+            <div>
+              <span className="text-gray-500 dark:text-gray-400">평속</span>
+              <span className="ml-1.5 font-semibold">{s.averageSpeed.toFixed(1)} km/h</span>
+            </div>
+            {s.averagePower != null && (
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">파워</span>
+                <span className="ml-1.5 font-semibold">{s.averagePower} W</span>
+              </div>
+            )}
+            {s.averageHeartRate != null && (
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">심박</span>
+                <span className="ml-1.5 font-semibold">{s.averageHeartRate} bpm</span>
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex gap-6 text-sm mt-1">
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">평속</span>
-            <span className="ml-1.5 font-semibold">{s.averageSpeed.toFixed(1)} km/h</span>
-          </div>
-          {s.averagePower != null && (
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">파워</span>
-              <span className="ml-1.5 font-semibold">{s.averagePower} W</span>
-            </div>
-          )}
-          {s.averageHeartRate != null && (
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">심박</span>
-              <span className="ml-1.5 font-semibold">{s.averageHeartRate} bpm</span>
-            </div>
-          )}
-        </div>
+
+        {/* Right: Segment Achievements List */}
+        {achievements.length > 0 && (
+           <div className="w-[40%] max-w-[200px] flex-shrink-0 border-l border-gray-100 dark:border-gray-800 pl-4 flex flex-col -mt-2">
+             <div className="space-y-0.5">
+               {achievements.map((ach, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                     <div className="flex items-center gap-1.5 overflow-hidden">
+                        <AchievementBadge type={ach.type} />
+                        <span className="truncate">{ach.segmentName}</span>
+                     </div>
+                     <span className="font-mono opacity-80">{ach.time}</span>
+                  </div>
+               ))}
+             </div>
+           </div>
+        )}
       </div>
 
       {/* Route map with overlay */}
