@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import {
   collection, query, where, orderBy, getDocs,
   doc, getDoc, setDoc, deleteDoc,
@@ -37,6 +37,10 @@ export default function AthletePage() {
   const [friendStatus, setFriendStatus] = useState<"none" | "request_sent" | "request_received" | "friends">("none");
   const [friendLoading, setFriendLoading] = useState(false);
   const [friendCount, setFriendCount] = useState(0);
+
+  // Friend list
+  const [friends, setFriends] = useState<{ userId: string; nickname: string; profileImage: string | null }[]>([]);
+  const [friendsOpen, setFriendsOpen] = useState(false);
 
   // Activity filter
   const [filterType, setFilterType] = useState<"all" | "ride" | "strava">("all");
@@ -95,12 +99,22 @@ export default function AthletePage() {
       .catch(() => {});
   }, [currentUser, userId]);
 
-  // Fetch friend count
+  // Fetch friend list + count
   useEffect(() => {
     if (!userId) return;
 
     getDocs(collection(firestore, "friends", userId, "users"))
-      .then((snap) => setFriendCount(snap.size))
+      .then((snap) => {
+        setFriendCount(snap.size);
+        setFriends(snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            userId: d.id,
+            nickname: data.nickname || "",
+            profileImage: data.profileImage || null,
+          };
+        }));
+      })
       .catch(() => {});
   }, [userId]);
 
@@ -150,13 +164,17 @@ export default function AthletePage() {
     }
   };
 
-  const handleRemoveFriend = async () => {
-    if (!currentUser || !userId || friendLoading) return;
+  const handleRemoveFriend = async (targetId?: string) => {
+    const removeId = targetId || userId;
+    if (!currentUser || !removeId || friendLoading) return;
     setFriendLoading(true);
     try {
-      await deleteDoc(doc(firestore, "friends", currentUser.uid, "users", userId));
-      setFriendStatus("none");
+      await deleteDoc(doc(firestore, "friends", currentUser.uid, "users", removeId));
+      if (!targetId || targetId === userId) {
+        setFriendStatus("none");
+      }
       setFriendCount((c) => Math.max(0, c - 1));
+      setFriends((prev) => prev.filter((f) => f.userId !== removeId));
     } catch (err) {
       console.error("Remove friend failed:", err);
     } finally {
@@ -277,7 +295,12 @@ export default function AthletePage() {
             {friendCode && <span className="text-sm font-normal text-blue-500 ml-2">({friendCode})</span>}
           </h1>
           <div className="flex gap-4 mt-2 text-sm text-gray-600 dark:text-gray-300">
-            <span><strong className="text-gray-900 dark:text-gray-50">{friendCount}</strong> 친구</span>
+            <button
+              onClick={() => setFriendsOpen(!friendsOpen)}
+              className="hover:text-orange-500 transition-colors"
+            >
+              <strong className="text-gray-900 dark:text-gray-50">{friendCount}</strong> 친구
+            </button>
           </div>
         </div>
         {!isMe && currentUser && (
@@ -311,7 +334,7 @@ export default function AthletePage() {
             )}
             {friendStatus === "friends" && (
               <button
-                onClick={handleRemoveFriend}
+                onClick={() => handleRemoveFriend()}
                 disabled={friendLoading}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
               >
@@ -345,6 +368,52 @@ export default function AthletePage() {
           icon="⛰"
         />
       </div>
+
+      {/* Friend list */}
+      {friendsOpen && (
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">친구 ({friendCount})</h3>
+            <button
+              onClick={() => setFriendsOpen(false)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {friends.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+              아직 친구가 없습니다.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50 dark:divide-gray-800">
+              {friends.map((f) => (
+                <div key={f.userId} className="px-4 py-3 flex items-center gap-3">
+                  <Link to={`/athlete/${f.userId}`} className="flex items-center gap-3 flex-1 min-w-0">
+                    {f.profileImage ? (
+                      <img src={f.profileImage} alt="" className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <Avatar name={f.nickname} size="sm" />
+                    )}
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{f.nickname}</span>
+                  </Link>
+                  {isMe && (
+                    <button
+                      onClick={() => handleRemoveFriend(f.userId)}
+                      disabled={friendLoading}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Monthly activity trend chart */}
       {monthlyStats.length > 1 && (

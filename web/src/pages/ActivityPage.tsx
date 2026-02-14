@@ -151,7 +151,7 @@ export default function ActivityPage() {
   }, [activityId]);
 
   useEffect(() => {
-    if (!activity || !user || !profile?.stravaConnected || streams) return;
+    if (!activity || streams) return;
 
     const stravaId = (activity as Activity & { stravaActivityId?: number }).stravaActivityId;
     if (!stravaId) return;
@@ -171,7 +171,7 @@ export default function ActivityPage() {
       setLoadingStreams(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity, user, profile?.stravaConnected]);
+  }, [activity]);
 
   // Fetch co-riders: activities with the same groupRideId
   useEffect(() => {
@@ -591,42 +591,32 @@ export default function ActivityPage() {
         </div>
       )}
 
-      {/* Streams error / login prompt */}
-      {isStrava && !hasStreams && !loadingStreams && !showStreamSpinner && (
+      {/* Streams error */}
+      {isStrava && !hasStreams && !loadingStreams && !showStreamSpinner && streamsError && (
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-          {streamsError ? (
-            <div className="text-center text-sm text-red-500 dark:text-red-400">
-              <p>{streamsError}</p>
-              <button
-                onClick={() => {
-                  const stravaId = (activity as Activity & { stravaActivityId?: number }).stravaActivityId;
-                  if (!stravaId) return;
-                  setLoadingStreams(true);
-                  setStreamsError(null);
-                  setShowStreamSpinner(true);
-                  getStreams(stravaId).then((data) => {
-                    setStreams(data as unknown as ActivityStreams);
-                  }).catch((err) => {
-                    setStreamsError(err instanceof Error ? err.message : "GPS 데이터를 불러올 수 없습니다");
-                  }).finally(() => {
-                    setShowStreamSpinner(false);
-                    setLoadingStreams(false);
-                  });
-                }}
-                className="mt-2 text-orange-600 hover:text-orange-700 font-medium"
-              >
-                다시 시도
-              </button>
-            </div>
-          ) : !user ? (
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              로그인하면 고도 프로파일, 세그먼트, 성능 분석을 볼 수 있습니다
-            </p>
-          ) : !profile?.stravaConnected ? (
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              <Link to="/settings" className="text-orange-600 hover:text-orange-700 font-medium">Strava를 연동</Link>하면 상세 분석을 볼 수 있습니다
-            </p>
-          ) : null}
+          <div className="text-center text-sm text-gray-500 dark:text-gray-400">
+            <p>{streamsError}</p>
+            <button
+              onClick={() => {
+                const stravaId = (activity as Activity & { stravaActivityId?: number }).stravaActivityId;
+                if (!stravaId) return;
+                setLoadingStreams(true);
+                setStreamsError(null);
+                setShowStreamSpinner(true);
+                getStreams(stravaId).then((data) => {
+                  setStreams(data as unknown as ActivityStreams);
+                }).catch((err) => {
+                  setStreamsError(err instanceof Error ? err.message : "GPS 데이터를 불러올 수 없습니다");
+                }).finally(() => {
+                  setShowStreamSpinner(false);
+                  setLoadingStreams(false);
+                });
+              }}
+              className="mt-2 text-orange-600 hover:text-orange-700 font-medium"
+            >
+              다시 시도
+            </button>
+          </div>
         </div>
       )}
 

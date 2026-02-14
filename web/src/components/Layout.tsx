@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Outlet, Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
-  collection, query, orderBy, limit, onSnapshot, writeBatch, doc,
+  collection, query, orderBy, limit, onSnapshot, writeBatch, doc, deleteDoc,
 } from "firebase/firestore";
-import { firestore } from "../services/firebase";
+import { httpsCallable } from "firebase/functions";
+import { firestore, functions } from "../services/firebase";
 import Avatar from "./Avatar";
 import { useAuth } from "../contexts/AuthContext";
 import type { Notification } from "@shared/types";
@@ -100,6 +101,34 @@ export default function Layout() {
       case "friend_accept": return "🤝";
       case "kom": return "👑";
       default: return "🔔";
+    }
+  };
+
+  const handleAcceptFriend = async (n: Notification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) return;
+    try {
+      const accept = httpsCallable(functions, "acceptFriendRequest");
+      await accept({ requesterId: n.fromUserId });
+      // 읽음 처리
+      import("firebase/firestore").then(({ updateDoc }) => {
+        updateDoc(doc(firestore, "notifications", user.uid, "items", n.id), { read: true });
+      });
+    } catch (err) {
+      console.error("Accept friend failed:", err);
+    }
+  };
+
+  const handleDeclineFriend = async (n: Notification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) return;
+    try {
+      await deleteDoc(doc(firestore, "friend_requests", user.uid, "items", n.fromUserId));
+      import("firebase/firestore").then(({ updateDoc }) => {
+        updateDoc(doc(firestore, "notifications", user.uid, "items", n.id), { read: true });
+      });
+    } catch (err) {
+      console.error("Decline friend failed:", err);
     }
   };
 
@@ -206,7 +235,23 @@ export default function Layout() {
                                 <span className="text-base mt-0.5">{notifIcon(n.type)}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-gray-700 dark:text-gray-200 line-clamp-2">{n.message}</p>
-                                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(typeof n.createdAt === "number" ? n.createdAt : (n.createdAt as any)?.toMillis?.() ?? Date.now())}</span>
+                                  {n.type === "friend_request" && !n.read && (
+                                    <div className="flex gap-2 mt-1.5">
+                                      <button
+                                        onClick={(e) => handleAcceptFriend(n, e)}
+                                        className="px-3 py-1 text-xs font-medium rounded-md bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                                      >
+                                        수락
+                                      </button>
+                                      <button
+                                        onClick={(e) => handleDeclineFriend(n, e)}
+                                        className="px-3 py-1 text-xs font-medium rounded-md bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                      >
+                                        거절
+                                      </button>
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 block">{timeAgo(typeof n.createdAt === "number" ? n.createdAt : (n.createdAt as any)?.toMillis?.() ?? Date.now())}</span>
                                 </div>
                                 {!n.read && (
                                   <span className="w-2 h-2 bg-orange-500 rounded-full mt-1.5 shrink-0" />

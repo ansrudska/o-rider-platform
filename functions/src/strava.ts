@@ -220,9 +220,7 @@ export const stravaExchangeToken = onCall(
 export const stravaGetActivityStreams = onCall(
   { secrets: [STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET] },
   async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-
-    const uid = request.auth.uid;
+    const uid = request.auth?.uid ?? null;
     const { stravaActivityId } = request.data as { stravaActivityId: number };
     if (!stravaActivityId) throw new HttpsError("invalid-argument", "stravaActivityId required");
 
@@ -231,15 +229,18 @@ export const stravaGetActivityStreams = onCall(
     const activityDoc = await db.doc(`activities/${activityDocId}`).get();
     const activityData = activityDoc.exists ? activityDoc.data() : null;
     const ownerId = activityData?.userId as string | undefined;
-    const isOwner = ownerId === uid;
+    const isOwner = uid != null && ownerId === uid;
+    const visibility = (activityData?.visibility as string) ?? "everyone";
 
     // Access control based on visibility
     if (!isOwner && activityData) {
-      const visibility = (activityData.visibility as string) ?? "everyone";
       if (visibility === "private") {
         throw new HttpsError("permission-denied", "This activity is private");
       }
       if (visibility === "friends") {
+        if (!uid) {
+          throw new HttpsError("permission-denied", "Login required to view friends-only activities");
+        }
         // Check mutual follow: viewer follows owner AND owner follows viewer
         const [viewerFollows, ownerFollows] = await Promise.all([
           db.doc(`following/${uid}/users/${ownerId}`).get(),
@@ -249,7 +250,7 @@ export const stravaGetActivityStreams = onCall(
           throw new HttpsError("permission-denied", "This activity is visible to friends only");
         }
       }
-      // "everyone" → allow
+      // "everyone" → allow (even unauthenticated)
     }
 
     // Check cache
@@ -285,6 +286,11 @@ export const stravaGetActivityStreams = onCall(
         }
         await cacheRef.delete();
       }
+    }
+
+    // Unauthenticated users can only see cached data
+    if (!uid) {
+      throw new HttpsError("not-found", "Stream data not yet available");
     }
 
     // Use owner's Strava token for API calls (non-owner viewers need cached data)
