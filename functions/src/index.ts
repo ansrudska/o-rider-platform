@@ -28,3 +28,5 @@ export {
 } from "./strava";
 export { scheduledFirestoreBackup } from "./backup";
 export { proxyPhotoDownload } from "./export";
+export { onFeedbackCreate } from "./feedback";
+export { onBillingAlert, onCrashlyticsAlert, onPerformanceAlert, onErrorLogCreate } from "./alerts";

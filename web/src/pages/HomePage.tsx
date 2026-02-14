@@ -225,7 +225,7 @@ export default function HomePage() {
 
       <div className="flex gap-6">
         {/* Left: Activity Feed */}
-        <div className="flex-1 min-w-0 space-y-4">
+        <div className="flex-1 min-w-0 space-y-4 max-h-[calc(100vh-12rem)] overflow-y-auto px-1 -mx-1">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">
               {isLoggedIn ? "활동 피드" : "최근 공개 활동"}

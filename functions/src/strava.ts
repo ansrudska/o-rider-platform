@@ -4,6 +4,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import * as zlib from "zlib";
 import { randomUUID } from "crypto";
+import { logError, logWarning } from "./alerts";
 
 const STRAVA_CLIENT_ID = defineSecret("STRAVA_CLIENT_ID");
 const STRAVA_CLIENT_SECRET = defineSecret("STRAVA_CLIENT_SECRET");
@@ -1060,6 +1061,7 @@ export const stravaQueueProcessor = onSchedule(
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         console.error(`[queue] Job ${jobId} error:`, errMsg);
+        logError("stravaQueue", err, { jobId, uid, processedChunks }).catch(() => {});
 
         // Token refresh failures → mark as failed
         if (errMsg.includes("token refresh failed") || errMsg.includes("Strava not connected")) {
@@ -2059,6 +2061,7 @@ export const stravaWebhook = onRequest(
         accessToken = await getValidAccessToken(uid);
       } catch (err) {
         console.error(`[webhook] Token error for ${uid}:`, err);
+        logError("stravaWebhook", err, { uid, eventType: event.aspect_type }).catch(() => {});
         res.status(200).send("OK");
         return;
       }
@@ -2070,6 +2073,7 @@ export const stravaWebhook = onRequest(
 
       if (!resp.ok) {
         console.error(`[webhook] Strava API error: ${resp.status}`);
+        logWarning("stravaWebhook", `Strava API error: ${resp.status}`, { uid }).catch(() => {});
         res.status(200).send("OK");
         return;
       }

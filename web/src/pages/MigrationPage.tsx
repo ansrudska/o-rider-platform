@@ -585,6 +585,13 @@ export default function MigrationPage() {
                  )}
               </div>
 
+              <button
+                onClick={() => setStep("scope")}
+                className="px-6 py-3 border-2 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                📅 다른 기간 추가 가져오기
+              </button>
+
               {/* Next steps suggestion */}
               <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">다음을 시도해보세요</p>

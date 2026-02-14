@@ -422,7 +422,7 @@ export default function Layout() {
       {/* Footer */}
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 mt-12">
         <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-400 dark:text-gray-500">
-          <span>&copy; 2026 O-Rider <span className="inline-block ml-1 px-1.5 py-0.5 text-[10px] rounded bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-medium">Beta</span></span>
+          <span className="flex items-center gap-2">&copy; 2026 O-Rider <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-medium">Beta</span><span className="flex items-center gap-1 text-gray-400 dark:text-gray-500"><svg className="w-3 h-3 text-[#FC4C02]" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" /></svg>Powered by Strava</span></span>
           <div className="flex items-center gap-4">
             <Link to="/feedback" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">피드백</Link>
             <Link to="/terms" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">이용약관</Link>

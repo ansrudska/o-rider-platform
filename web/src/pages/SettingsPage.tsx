@@ -291,6 +291,11 @@ export default function SettingsPage() {
             )}
           </div>
 
+          <div className="mt-4 flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+            <svg className="w-3.5 h-3.5 text-[#FC4C02]" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" /></svg>
+            Powered by Strava
+          </div>
+
           {profile?.stravaConnected && (
             <div className="mt-6 pl-13 border-t border-gray-50 dark:border-gray-800 pt-4 space-y-3">
               <div className="flex gap-2">

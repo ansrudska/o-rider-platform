@@ -175,6 +175,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Feedback (누구나 작성 가능, 읽기는 불가)
+    match /feedback/{feedbackId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
     // Route Sharing signaling (그룹 멤버 또는 direct 공유)
     match /route_sharing/{groupId}/{subcollection}/{docId} {
       allow read, write: if request.auth != null;
@@ -187,6 +193,11 @@ service cloud.firestore {
 
     // Strava rate limit (server-only)
     match /strava_rate_limit/{doc} {
+      allow read, write: if false;
+    }
+
+    // Error logs (server-only, written by Cloud Functions)
+    match /error_logs/{logId} {
       allow read, write: if false;
     }
   }
