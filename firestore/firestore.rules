@@ -119,9 +119,34 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow update: if request.auth != null && request.auth.uid == userId
                     && request.resource.data.diff(resource.data).affectedKeys()
-                       .hasOnly(['defaultVisibility', 'nickname']);
+                       .hasOnly(['defaultVisibility', 'nickname', 'currentGroupId']);
       allow create: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
+    }
+
+    // Groups
+    match /groups/{groupId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.creatorId;
+      allow delete: if request.auth != null;
+
+      // Group Members (subcollection)
+      match /members/{memberId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update: if request.auth != null
+                      && request.auth.uid == memberId;
+        allow delete: if request.auth != null;
+      }
+    }
+
+    // Group Invitations
+    match /group_invitations/{userId}/items/{groupId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // Strava tokens (server-only, no client access)
