@@ -1,25 +1,30 @@
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getDatabase } from "firebase/database";
-import { getStorage } from "firebase/storage";
-import { getFunctions } from "firebase/functions";
+import { initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getDatabase, type Database } from "firebase/database";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getFunctions, type Functions } from "firebase/functions";
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
+let app: FirebaseApp;
+let _auth: Auth;
+let _firestore: Firestore;
+let _database: Database;
+let _storage: FirebaseStorage;
+let _functions: Functions;
 
-const app = initializeApp(firebaseConfig);
+/** main.tsx에서 렌더링 전 호출. /__/firebase/init.json에서 config를 런타임 로드. */
+export async function initFirebase() {
+  const resp = await fetch("/__/firebase/init.json");
+  const config = await resp.json();
+  app = initializeApp(config);
+  _auth = getAuth(app);
+  _firestore = getFirestore(app);
+  _database = getDatabase(app);
+  _storage = getStorage(app);
+  _functions = getFunctions(app);
+}
 
-export const auth = getAuth(app);
-export const firestore = getFirestore(app);
-export const database = getDatabase(app);
-export const storage = getStorage(app);
-export const functions = getFunctions(app);
+export { _auth as auth, _firestore as firestore, _database as database, _storage as storage, _functions as functions };
 export const googleProvider = new GoogleAuthProvider();
+
+
