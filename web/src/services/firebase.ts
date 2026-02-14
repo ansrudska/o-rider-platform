@@ -14,8 +14,29 @@ let _functions: Functions;
 
 /** main.tsx에서 렌더링 전 호출. /__/firebase/init.json에서 config를 런타임 로드. */
 export async function initFirebase() {
-  const resp = await fetch("/__/firebase/init.json");
-  const config = await resp.json();
+  let config;
+  
+  try {
+    const resp = await fetch("/__/firebase/init.json");
+    if (resp.ok) {
+      config = await resp.json();
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  if (!config) {
+    config = {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    };
+  }
+
   app = initializeApp(config);
   _auth = getAuth(app);
   _firestore = getFirestore(app);
