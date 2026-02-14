@@ -4,7 +4,6 @@ import RouteMap from "../components/RouteMap";
 import ElevationChart from "../components/ElevationChart";
 import type { OverlayDataset } from "../components/ElevationChart";
 import Avatar from "../components/Avatar";
-import TabNav from "../components/TabNav";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useStrava } from "../hooks/useStrava";
@@ -135,7 +134,6 @@ export default function ActivityPage() {
   const [showAllResults, setShowAllResults] = useState(false);
   const [showAllSegments, setShowAllSegments] = useState(false);
   const [activeOverlays, setActiveOverlays] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     if (!activityId) return;
@@ -399,18 +397,6 @@ export default function ActivityPage() {
   const prCount = segmentEfforts.filter((e) => e.prRank != null && e.prRank <= 3).length;
   const komCount = segmentEfforts.filter((e) => e.komRank != null && e.komRank <= 10).length;
 
-  // Build tabs
-  const tabs: { id: string; label: string; count?: number }[] = [
-    { id: "overview", label: "개요" },
-  ];
-  if (elevData.length > 0 || (showStreamSpinner && isStrava)) {
-    tabs.push({ id: "analysis", label: "분석" });
-  }
-  if (segmentEfforts.length > 0) {
-    tabs.push({ id: "segments", label: "세그먼트", count: segmentEfforts.length });
-  }
-  tabs.push({ id: "comments", label: "댓글", count: activityComments.length });
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* 1. Header (제목) */}
@@ -477,13 +463,7 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <TabNav tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-
-      {/* Overview Tab */}
-      {activeTab === "overview" && (
-        <>
-          {/* 2. Photos (사진) */}
+      {/* 2. Photos (사진) */}
           {photos.length > 0 && (
             <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
@@ -720,54 +700,48 @@ export default function ActivityPage() {
             </div>
           )}
 
-          {/* Co-riders (함께 탄 라이더) */}
-          {coRiders.length > 0 && (
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
-                <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none">
-                  <circle cx="9" cy="7" r="3.5" fill="#F97316" opacity="0.15" stroke="#F97316" strokeWidth="1.2" />
-                  <path d="M2 19.5v-1a5 5 0 0110 0v1" stroke="#F97316" strokeWidth="1.3" strokeLinecap="round" />
-                  <circle cx="16" cy="8" r="2.5" fill="#F97316" opacity="0.1" stroke="#F97316" strokeWidth="1.2" />
-                  <path d="M14 19.5v-.5a4 4 0 018 0v.5" stroke="#F97316" strokeWidth="1.3" strokeLinecap="round" />
-                </svg>
-                함께 탄 라이더 ({coRiders.length}명)
-              </h3>
-              <div className="space-y-2">
-                {coRiders.map((r) => (
-                  <Link
-                    key={r.id}
-                    to={`/activity/${r.id}`}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <Avatar
-                      name={r.nickname}
-                      imageUrl={r.profileImage}
-                      size="sm"
-                      userId={r.userId}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{r.nickname}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                        <span>{(r.summary.distance / 1000).toFixed(1)} km</span>
-                        <span>{r.summary.averageSpeed.toFixed(1)} km/h</span>
-                        {r.summary.averageHeartRate != null && <span>{r.summary.averageHeartRate} bpm</span>}
-                        {r.summary.averagePower != null && <span>{r.summary.averagePower} W</span>}
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-400 dark:text-gray-500">
-                      {formatDuration(r.summary.ridingTimeMillis)}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+      {/* Co-riders (함께 탄 라이더) */}
+      {coRiders.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+            <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none">
+              <circle cx="9" cy="7" r="3.5" fill="#F97316" opacity="0.15" stroke="#F97316" strokeWidth="1.2" />
+              <path d="M2 19.5v-1a5 5 0 0110 0v1" stroke="#F97316" strokeWidth="1.3" strokeLinecap="round" />
+              <circle cx="16" cy="8" r="2.5" fill="#F97316" opacity="0.1" stroke="#F97316" strokeWidth="1.2" />
+              <path d="M14 19.5v-.5a4 4 0 018 0v.5" stroke="#F97316" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+            함께 탄 라이더 ({coRiders.length}명)
+          </h3>
+          <div className="space-y-2">
+            {coRiders.map((r) => (
+              <Link
+                key={r.id}
+                to={`/activity/${r.id}`}
+                className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <Avatar
+                  name={r.nickname}
+                  imageUrl={r.profileImage}
+                  size="sm"
+                  userId={r.userId}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{r.nickname}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                    <span>{(r.summary.distance / 1000).toFixed(1)} km</span>
+                    <span>{r.summary.averageSpeed.toFixed(1)} km/h</span>
+                    {r.summary.averageHeartRate != null && <span>{r.summary.averageHeartRate} bpm</span>}
+                    {r.summary.averagePower != null && <span>{r.summary.averagePower} W</span>}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 dark:text-gray-500">
+                  {formatDuration(r.summary.ridingTimeMillis)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
-
-      {/* Analysis Tab */}
-      {activeTab === "analysis" && (
-        <>
           {/* 4. Elevation & Performance Chart (고도 & 성능 분석) */}
           {showStreamSpinner && isStrava && (
             <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
@@ -867,11 +841,9 @@ export default function ActivityPage() {
               />
             </div>
           )}
-        </>
-      )}
 
-      {/* Segments Tab */}
-      {activeTab === "segments" && segmentEfforts.length > 0 && (
+      {/* Segments */}
+      {segmentEfforts.length > 0 && (
         <div id="segments" className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <div className="font-semibold text-sm flex items-center gap-2">
@@ -982,8 +954,8 @@ export default function ActivityPage() {
         </div>
       )}
 
-      {/* Comments Tab */}
-      {activeTab === "comments" && (
+      {/* Comments */}
+      {(
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
           <div className="flex items-center gap-4 pb-3 border-b border-gray-100 dark:border-gray-800">
             <button
