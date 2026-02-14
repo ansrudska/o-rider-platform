@@ -269,3 +269,82 @@ export const addFriendByCode = onCall(async (request) => {
     friendNickname: targetData?.nickname || "",
   };
 });
+
+/**
+ * RTDB /friends/ → Firestore friends/ 마이그레이션 (callable)
+ * - 호출한 사용자의 RTDB 친구를 Firestore로 복사
+ * - 이미 존재하면 스킵
+ * - onFriendCreate가 역방향 + RTDB 동기화 처리하므로, 한쪽만 쓰면 됨
+ */
+export const migrateFriendsFromRTDB = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const myUid = request.auth.uid;
+
+  // RTDB에서 내 친구 목록 읽기
+  const rtdbFriendsSnap = await rtdb.ref(`friends/${myUid}`).once("value");
+  if (!rtdbFriendsSnap.exists()) {
+    return { migrated: 0, skipped: 0, message: "No RTDB friends to migrate" };
+  }
+
+  let migrated = 0;
+  let skipped = 0;
+
+  const friendEntries: { friendId: string; addedAt: number }[] = [];
+  rtdbFriendsSnap.forEach((child) => {
+    const friendId = child.key;
+    if (friendId) {
+      const addedAt = child.child("addedAt").val() || Date.now();
+      friendEntries.push({ friendId, addedAt });
+    }
+  });
+
+  for (const { friendId } of friendEntries) {
+    // Firestore에 이미 존재하는지 확인
+    const existingDoc = await db
+      .collection("friends")
+      .doc(myUid)
+      .collection("users")
+      .doc(friendId)
+      .get();
+
+    if (existingDoc.exists) {
+      skipped++;
+      continue;
+    }
+
+    // 상대 프로필 조회 (Firestore users/ 또는 RTDB /users/)
+    let nickname = "";
+    let profileImage: string | null = null;
+    let friendCode: string | null = null;
+
+    const firestoreProfile = await db.doc(`users/${friendId}`).get();
+    if (firestoreProfile.exists) {
+      const data = firestoreProfile.data();
+      nickname = data?.nickname || "";
+      profileImage = data?.photoURL || null;
+    } else {
+      const rtdbProfile = await rtdb.ref(`users/${friendId}`).once("value");
+      nickname = rtdbProfile.child("nickname").val() || "";
+      friendCode = rtdbProfile.child("friendCode").val() || null;
+    }
+
+    // Firestore에 친구 관계 생성 → onFriendCreate가 역방향 + RTDB 동기화
+    await db
+      .collection("friends")
+      .doc(myUid)
+      .collection("users")
+      .doc(friendId)
+      .set({
+        userId: friendId,
+        nickname,
+        profileImage,
+        friendCode,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+    migrated++;
+  }
+
+  return { migrated, skipped, total: friendEntries.length };
+});
