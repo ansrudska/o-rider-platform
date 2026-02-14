@@ -192,15 +192,31 @@ export default function SegmentPage() {
 
   if (segLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="h-[28rem] bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5 space-y-4">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 animate-pulse" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="space-y-2">
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16 animate-pulse" />
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4 h-28 animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!segment) {
     return (
-      <div className="text-center py-16 text-gray-500">
+      <div className="text-center py-16 text-gray-500 dark:text-gray-400">
         <p className="text-lg">세그먼트를 찾을 수 없습니다.</p>
         <Link to="/" className="text-orange-600 hover:underline text-sm mt-2 inline-block">홈으로 돌아가기</Link>
       </div>
@@ -234,17 +250,17 @@ export default function SegmentPage() {
       })()}
 
       {/* Header */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
         <div className="flex items-center gap-3 flex-wrap">
           {cat && (
             <span className={`px-2.5 py-1 text-xs font-bold rounded ${cat.bg}`}>
               {cat.label}
             </span>
           )}
-          <h1 className="text-2xl font-bold text-gray-900">{segment.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">{segment.name}</h1>
         </div>
         {(segment.city || segment.state) && (
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {[segment.city, segment.state].filter(Boolean).join(", ")}
           </p>
         )}
@@ -252,19 +268,19 @@ export default function SegmentPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
           <div>
-            <div className="text-xs text-gray-500">거리</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">거리</div>
             <div className="text-lg font-semibold">{(segment.distance / 1000).toFixed(2)} km</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">획득고도</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">획득고도</div>
             <div className="text-lg font-semibold">{Math.round(elevGain)} m</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">평균경사</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">평균경사</div>
             <div className="text-lg font-semibold">{segment.averageGrade.toFixed(1)}%</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">최대경사</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">최대경사</div>
             <div className="text-lg font-semibold">{segment.maximumGrade.toFixed(1)}%</div>
           </div>
         </div>
@@ -273,8 +289,8 @@ export default function SegmentPage() {
       {/* KOM + My Best */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* KOM */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <div className="text-xs text-gray-500 font-medium mb-2">KOM/QOM</div>
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">KOM/QOM</div>
           {komEffort ? (
             <div className="flex items-center gap-3">
               <Avatar name={komEffort.nickname} imageUrl={komEffort.profileImage} size="md" userId={komEffort.userId} />
@@ -283,67 +299,81 @@ export default function SegmentPage() {
                   {komEffort.nickname}
                 </Link>
                 <div className="text-2xl font-bold text-orange-600 font-mono">{formatTime(komEffort.elapsedTime)}</div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 dark:text-gray-400">
                   {komEffort.averageSpeed.toFixed(1)} km/h
                   {komEffort.averageWatts != null && ` · ${komEffort.averageWatts}W`}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-gray-400">기록 없음</div>
+            <div className="text-sm text-gray-400 dark:text-gray-500">기록 없음</div>
           )}
         </div>
 
         {/* My Best */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <div className="text-xs text-gray-500 font-medium mb-2">내 최고 기록</div>
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">내 최고 기록</div>
           {myBestEffort ? (
             <div>
               <div className="flex items-center gap-2">
-                <div className="text-2xl font-bold text-gray-900 font-mono">{formatTime(myBestEffort.elapsedTime)}</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-50 font-mono">{formatTime(myBestEffort.elapsedTime)}</div>
                 {myRank > 0 && (
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    myRank <= 3 ? RANK_STYLES[myRank - 1] : "bg-gray-100 text-gray-600"
+                    myRank <= 3 ? RANK_STYLES[myRank - 1] : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
                   }`}>
                     #{myRank}
                   </span>
                 )}
               </div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {myBestEffort.averageSpeed.toFixed(1)} km/h
                 {myBestEffort.averageWatts != null && ` · ${myBestEffort.averageWatts}W`}
                 {myBestEffort.averageHeartrate != null && ` · ${Math.round(myBestEffort.averageHeartrate)} bpm`}
               </div>
-              <div className="text-xs text-gray-400 mt-0.5">
+              <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                 {new Date(myBestEffort.startDate).toLocaleDateString("ko-KR")}
               </div>
             </div>
           ) : user ? (
-            <div className="text-sm text-gray-400">아직 기록 없음</div>
+            <div className="text-sm text-gray-400 dark:text-gray-500">아직 기록 없음</div>
           ) : (
-            <div className="text-sm text-gray-400">로그인하면 내 기록을 확인할 수 있습니다</div>
+            <div className="text-sm text-gray-400 dark:text-gray-500">로그인하면 내 기록을 확인할 수 있습니다</div>
           )}
         </div>
       </div>
 
       {/* Leaderboard */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="font-semibold text-sm">
             리더보드 ({efforts.length}명)
           </h2>
         </div>
 
         {loadingEfforts ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="w-6 h-6 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-full">
+            <div className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2.5 flex gap-4">
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-8 animate-pulse" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24 animate-pulse" />
+              <div className="flex-1" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16 animate-pulse" />
+            </div>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-3 flex items-center gap-4">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-6 animate-pulse" />
+                <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-28 animate-pulse" />
+                <div className="flex-1" />
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16 animate-pulse" />
+              </div>
+            ))}
           </div>
         ) : efforts.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-sm">아직 기록이 없습니다</div>
+          <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">아직 기록이 없습니다</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+              <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
                 <th className="text-left px-4 py-2.5 font-medium w-12">#</th>
                 <th className="text-left px-4 py-2.5 font-medium">라이더</th>
                 <th className="text-right px-4 py-2.5 font-medium">시간</th>
@@ -360,7 +390,7 @@ export default function SegmentPage() {
                 return (
                   <tr
                     key={effort.id}
-                    className={`border-b border-gray-100 last:border-0 ${isMe ? "bg-orange-50" : "hover:bg-gray-50"} transition-colors`}
+                    className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${isMe ? "bg-orange-50 dark:bg-orange-900/20" : "hover:bg-gray-50 dark:hover:bg-gray-800"} transition-colors`}
                   >
                     <td className="px-4 py-3 font-medium">
                       {rank <= 3 ? (
@@ -368,7 +398,7 @@ export default function SegmentPage() {
                           {rank}
                         </span>
                       ) : (
-                        <span className="text-gray-400">{rank}</span>
+                        <span className="text-gray-400 dark:text-gray-500">{rank}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -379,7 +409,7 @@ export default function SegmentPage() {
                           className={`font-medium hover:text-orange-600 ${isMe ? "text-orange-600" : ""}`}
                         >
                           {effort.nickname || "Rider"}
-                          {isMe && <span className="text-xs text-gray-400 ml-1">(나)</span>}
+                          {isMe && <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">(나)</span>}
                         </Link>
                       </div>
                     </td>
@@ -395,7 +425,7 @@ export default function SegmentPage() {
                     <td className="text-right px-4 py-3 text-red-500 hidden md:table-cell">
                       {effort.averageHeartrate != null ? `${Math.round(effort.averageHeartrate)}` : "-"}
                     </td>
-                    <td className="text-right px-4 py-3 text-gray-500 hidden lg:table-cell">
+                    <td className="text-right px-4 py-3 text-gray-500 dark:text-gray-400 hidden lg:table-cell">
                       {new Date(effort.startDate).toLocaleDateString("ko-KR")}
                     </td>
                   </tr>
@@ -408,14 +438,14 @@ export default function SegmentPage() {
 
       {/* My History */}
       {user && myBestEffort && (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
           <button
             onClick={() => setShowAllEfforts(!showAllEfforts)}
-            className="w-full px-5 py-3 border-b border-gray-200 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            className="w-full px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <h2 className="font-semibold text-sm">내 기록 히스토리</h2>
             <svg
-              className={`w-4 h-4 text-gray-400 transition-transform ${showAllEfforts ? "rotate-180" : ""}`}
+              className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${showAllEfforts ? "rotate-180" : ""}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -424,7 +454,7 @@ export default function SegmentPage() {
             </svg>
           </button>
           {showAllEfforts && (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {allEfforts.length === 0 ? (
                 <div className="flex items-center justify-center py-6">
                   <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -433,10 +463,10 @@ export default function SegmentPage() {
                 allEfforts.map((effort) => {
                   const isBest = effort.id === myBestEffort.id;
                   return (
-                    <div key={effort.id} className={`px-5 py-3 flex items-center justify-between ${isBest ? "bg-orange-50" : ""}`}>
+                    <div key={effort.id} className={`px-5 py-3 flex items-center justify-between ${isBest ? "bg-orange-50 dark:bg-orange-900/20" : ""}`}>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-500">{new Date(effort.startDate).toLocaleDateString("ko-KR")}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">{new Date(effort.startDate).toLocaleDateString("ko-KR")}</span>
                           {isBest && (
                             <span className="text-xs font-bold bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded">BEST</span>
                           )}
@@ -452,7 +482,7 @@ export default function SegmentPage() {
                       </div>
                       <div className="text-right">
                         <div className="font-mono font-semibold">{formatTime(effort.elapsedTime)}</div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {effort.averageSpeed.toFixed(1)} km/h
                           {effort.averageWatts != null && ` · ${effort.averageWatts}W`}
                         </div>

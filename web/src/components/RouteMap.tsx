@@ -70,7 +70,7 @@ export default function RouteMap({
   if (positions.length === 0) {
     return (
       <div
-        className={`${height} bg-gray-100 ${rounded ? "rounded-lg" : ""} flex items-center justify-center text-gray-400 text-sm`}
+        className={`${height} bg-gray-100 dark:bg-gray-800 ${rounded ? "rounded-lg" : ""} flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm`}
       >
         경로 데이터 없음
       </div>

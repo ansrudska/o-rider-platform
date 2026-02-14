@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, Link, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   collection, query, orderBy, limit, onSnapshot, writeBatch, doc,
 } from "firebase/firestore";
@@ -34,6 +34,7 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const { user, profile, loading, signInWithGoogle, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const migrationStatus = profile?.migration?.status;
   const showMigrate = user && profile && profile.stravaConnected;
@@ -100,9 +101,11 @@ export default function Layout() {
     }
   };
 
+  const profilePath = user ? `/athlete/${user.uid}` : "/settings";
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <nav className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
           {/* Left: logo + nav */}
           <div className="flex items-center gap-6">
@@ -124,8 +127,8 @@ export default function Layout() {
                   className={({ isActive }) =>
                     `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                       isActive
-                        ? "bg-orange-50 text-orange-600"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                        ? "bg-orange-50 text-orange-600 dark:bg-orange-900/20"
+                        : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-50 hover:bg-gray-50 dark:hover:bg-gray-800"
                     }`
                   }
                 >
@@ -138,14 +141,14 @@ export default function Layout() {
           {/* Right: auth-dependent */}
           <div className="flex items-center gap-3">
             {loading ? (
-              <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+              <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
             ) : user ? (
               <>
                 {/* Notification bell */}
                 <div className="relative">
                   <button
                     onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}
-                    className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                    className="relative p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                   >
                     <svg
                       className="w-5 h-5"
@@ -172,9 +175,9 @@ export default function Layout() {
                         className="fixed inset-0 z-40"
                         onClick={() => setNotifOpen(false)}
                       />
-                      <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
-                        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                          <span className="text-sm font-semibold">알림</span>
+                      <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">알림</span>
                           {unreadCount > 0 && (
                             <button
                               onClick={handleMarkAllRead}
@@ -186,7 +189,7 @@ export default function Layout() {
                         </div>
                         <div className="max-h-80 overflow-y-auto">
                           {notifications.length === 0 ? (
-                            <div className="px-4 py-8 text-center text-sm text-gray-400">
+                            <div className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
                               알림이 없습니다.
                             </div>
                           ) : (
@@ -194,14 +197,14 @@ export default function Layout() {
                               <button
                                 key={n.id}
                                 onClick={() => handleNotifClick(n)}
-                                className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 ${
-                                  !n.read ? "bg-orange-50/50" : ""
+                                className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-50 dark:border-gray-800 ${
+                                  !n.read ? "bg-orange-50/50 dark:bg-orange-900/20" : ""
                                 }`}
                               >
                                 <span className="text-base mt-0.5">{notifIcon(n.type)}</span>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-gray-700 line-clamp-2">{n.message}</p>
-                                  <span className="text-xs text-gray-400 mt-0.5">{timeAgo(n.createdAt)}</span>
+                                  <p className="text-sm text-gray-700 dark:text-gray-200 line-clamp-2">{n.message}</p>
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</span>
                                 </div>
                                 {!n.read && (
                                   <span className="w-2 h-2 bg-orange-500 rounded-full mt-1.5 shrink-0" />
@@ -238,22 +241,22 @@ export default function Layout() {
                         className="fixed inset-0 z-40"
                         onClick={() => setProfileOpen(false)}
                       />
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                        <div className="px-4 py-2 border-b border-gray-100">
-                          <div className="text-sm font-medium text-gray-900 truncate">
+                      <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                        <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">
                             {profile?.nickname ?? user.displayName}
                           </div>
                         </div>
                         <Link
                           to={`/athlete/${user.uid}`}
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                           onClick={() => setProfileOpen(false)}
                         >
                           내 프로필
                         </Link>
                         <Link
                           to="/settings"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                           onClick={() => setProfileOpen(false)}
                         >
                           설정
@@ -266,19 +269,19 @@ export default function Layout() {
                         ) : (
                           <Link
                             to="/settings"
-                            className="block px-4 py-2 text-sm text-orange-600 hover:bg-gray-50"
+                            className="block px-4 py-2 text-sm text-orange-600 hover:bg-gray-50 dark:hover:bg-gray-800"
                             onClick={() => setProfileOpen(false)}
                           >
                             Strava 연동
                           </Link>
                         )}
-                        <div className="border-t border-gray-100 my-1" />
+                        <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
                         <button
                           onClick={() => {
                             setProfileOpen(false);
                             logout();
                           }}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50"
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                         >
                           로그아웃
                         </button>
@@ -290,7 +293,7 @@ export default function Layout() {
             ) : (
               <button
                 onClick={signInWithGoogle}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
@@ -316,7 +319,7 @@ export default function Layout() {
 
             {/* Mobile hamburger */}
             <button
-              className="md:hidden p-2 text-gray-500"
+              className="md:hidden p-2 text-gray-500 dark:text-gray-400"
               onClick={() => setMobileOpen(!mobileOpen)}
             >
               <svg
@@ -347,7 +350,7 @@ export default function Layout() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white px-4 py-2">
+          <div className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
@@ -357,8 +360,8 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `block px-3 py-2 rounded-md text-sm font-medium ${
                     isActive
-                      ? "bg-orange-50 text-orange-600"
-                      : "text-gray-600 hover:bg-gray-50"
+                      ? "bg-orange-50 text-orange-600 dark:bg-orange-900/20"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                   }`
                 }
               >
@@ -374,11 +377,88 @@ export default function Layout() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white mt-12">
-        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-gray-400">
+      <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 mt-12">
+        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-gray-400 dark:text-gray-500">
           <span>&copy; 2026 O-Rider</span>
         </div>
       </footer>
+
+      {/* Mobile bottom tab bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <nav className="flex items-center justify-around h-14">
+          {/* Feed tab */}
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center flex-1 h-full text-xs transition-colors ${
+                isActive
+                  ? "text-orange-600"
+                  : "text-gray-500 dark:text-gray-400"
+              }`
+            }
+          >
+            <svg className="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span>피드</span>
+          </NavLink>
+
+          {/* Explore tab */}
+          <NavLink
+            to="/explore"
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center flex-1 h-full text-xs transition-colors ${
+                isActive
+                  ? "text-orange-600"
+                  : "text-gray-500 dark:text-gray-400"
+              }`
+            }
+          >
+            <svg className="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span>탐색</span>
+          </NavLink>
+
+          {/* Notifications tab */}
+          <button
+            onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}
+            className={`flex flex-col items-center justify-center flex-1 h-full text-xs transition-colors relative ${
+              notifOpen
+                ? "text-orange-600"
+                : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            <svg className="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 left-1/2 ml-1.5 min-w-[16px] h-4 px-1 bg-orange-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+            <span>알림</span>
+          </button>
+
+          {/* Profile tab */}
+          <NavLink
+            to={profilePath}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center flex-1 h-full text-xs transition-colors ${
+                isActive || location.pathname.startsWith("/athlete/")
+                  ? "text-orange-600"
+                  : "text-gray-500 dark:text-gray-400"
+              }`
+            }
+          >
+            <svg className="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span>프로필</span>
+          </NavLink>
+        </nav>
+      </div>
     </div>
   );
 }

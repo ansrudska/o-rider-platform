@@ -217,6 +217,9 @@ export function useExport() {
         setProgress({ phase: "streams", current: i, total, label: `GPS 데이터 ${i}/${total}` });
 
         const batch = activities.slice(i, i + 10);
+        const getStreams = httpsCallable<{ stravaActivityId: number }, ParsedStream>(
+          functions, "stravaGetActivityStreams",
+        );
         const results = await Promise.all(
           batch.map(async (a) => {
             try {
@@ -226,6 +229,15 @@ export function useExport() {
               const streamDoc = await getDoc(doc(firestore, "activity_streams", streamDocId));
               if (!streamDoc.exists()) return null;
               const data = streamDoc.data();
+              if (data?.storage === "gcs" && a.stravaActivityId) {
+                // GCS-stored stream: fetch via Cloud Function
+                try {
+                  const result = await getStreams({ stravaActivityId: a.stravaActivityId });
+                  return { id: a.id, stream: result.data };
+                } catch {
+                  return null;
+                }
+              }
               if (typeof data?.json === "string") {
                 try {
                   return { id: a.id, stream: JSON.parse(data.json) as ParsedStream };
@@ -357,12 +369,27 @@ export function useExport() {
           const batch = allPhotos.slice(i, i + 5);
           const results = await Promise.allSettled(
             batch.map(async (ref) => {
+              const url = ref.photo.url!;
               try {
-                const result = await proxyPhotoDownload({ url: ref.photo.url! });
-                const ext = result.data.contentType.includes("png") ? "png" : "jpg";
-                return { key: `${ref.activityId}_${ref.index}`, data: result.data.data, ext };
+                let data: string;
+                let ext: string;
+                if (url.includes("firebasestorage.googleapis.com")) {
+                  // GCS-stored photo: fetch directly (no proxy needed)
+                  const resp = await fetch(url);
+                  if (!resp.ok) throw new Error(`Photo fetch failed: ${resp.status}`);
+                  const contentType = resp.headers.get("content-type") ?? "image/jpeg";
+                  ext = contentType.includes("png") ? "png" : "jpg";
+                  const buffer = await resp.arrayBuffer();
+                  data = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                } else {
+                  // Legacy Strava CDN URL: use proxy
+                  const result = await proxyPhotoDownload({ url });
+                  ext = result.data.contentType.includes("png") ? "png" : "jpg";
+                  data = result.data.data;
+                }
+                return { key: `${ref.activityId}_${ref.index}`, data, ext };
               } catch (e) {
-                console.warn(`[export] 사진 다운로드 실패:`, ref.photo.url, e);
+                console.warn(`[export] 사진 다운로드 실패:`, url, e);
                 return null;
               }
             }),

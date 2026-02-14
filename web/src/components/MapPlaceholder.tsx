@@ -9,21 +9,21 @@ export default function MapPlaceholder({
 }: MapPlaceholderProps) {
   return (
     <div
-      className={`${height} bg-gradient-to-br from-green-50 to-blue-50 rounded-lg border border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden`}
+      className={`${height} bg-gradient-to-br from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 relative overflow-hidden`}
     >
       {/* Fake map grid */}
       <div className="absolute inset-0 opacity-10">
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={`h${i}`}
-            className="absolute w-full border-t border-gray-400"
+            className="absolute w-full border-t border-gray-400 dark:border-gray-600"
             style={{ top: `${(i + 1) * 12}%` }}
           />
         ))}
         {Array.from({ length: 12 }).map((_, i) => (
           <div
             key={`v${i}`}
-            className="absolute h-full border-l border-gray-400"
+            className="absolute h-full border-l border-gray-400 dark:border-gray-600"
             style={{ left: `${(i + 1) * 8}%` }}
           />
         ))}

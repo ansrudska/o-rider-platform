@@ -1,4 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { firestore } from "../services/firebase";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 import type { Activity } from "@shared/types";
 import Avatar from "./Avatar";
 import RouteMap from "./RouteMap";
@@ -42,9 +47,34 @@ export default function ActivityCard({
 }: ActivityCardProps) {
   const s = activity.summary;
   const isStrava = (activity as Activity & { source?: string }).source === "strava";
+  const { user, profile } = useAuth();
+  const { showToast } = useToast();
+  const [liked, setLiked] = useState(false);
+  const [localKudos, setLocalKudos] = useState(activity.kudosCount);
+
+  const handleToggleKudos = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user || !profile) return;
+    const kudosDocRef = doc(firestore, "activities", activity.id, "kudos", user.uid);
+    if (liked) {
+      setLiked(false);
+      setLocalKudos((c) => Math.max(0, c - 1));
+      await deleteDoc(kudosDocRef);
+    } else {
+      setLiked(true);
+      setLocalKudos((c) => c + 1);
+      await setDoc(kudosDocRef, {
+        nickname: profile.nickname ?? user.displayName ?? "User",
+        profileImage: user.photoURL ?? null,
+        createdAt: Date.now(),
+      });
+      showToast("좋아요를 보냈습니다");
+    }
+  };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
@@ -69,15 +99,15 @@ export default function ActivityCard({
               ) : (
                 <img src="/favicon.svg" alt="O-Rider" className="w-3.5 h-3.5" />
               )}
-              <span className="text-xs text-gray-400">{timeAgo(activity.createdAt)}</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(activity.createdAt)}</span>
             </div>
-            <div className="text-xs text-gray-400 mt-0.5">{formatDate(activity.startTime)}</div>
+            <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{formatDate(activity.startTime)}</div>
           </div>
         </div>
         {/* Title */}
         <Link
           to={`/activity/${activity.id}`}
-          className="text-base font-bold text-gray-900 hover:text-orange-600 transition-colors block mt-2"
+          className="text-base font-bold text-gray-900 dark:text-gray-50 hover:text-orange-600 transition-colors block mt-2"
         >
           {activity.description || "라이딩"}
         </Link>
@@ -87,32 +117,32 @@ export default function ActivityCard({
       <div className="px-4 pb-3">
         <div className="flex gap-6 text-sm">
           <div>
-            <span className="text-gray-500">거리</span>
+            <span className="text-gray-500 dark:text-gray-400">거리</span>
             <span className="ml-1.5 font-semibold">{(s.distance / 1000).toFixed(1)} km</span>
           </div>
           <div>
-            <span className="text-gray-500">획득고도</span>
+            <span className="text-gray-500 dark:text-gray-400">획득고도</span>
             <span className="ml-1.5 font-semibold">{Math.round(s.elevationGain)} m</span>
           </div>
           <div>
-            <span className="text-gray-500">시간</span>
+            <span className="text-gray-500 dark:text-gray-400">시간</span>
             <span className="ml-1.5 font-semibold">{formatDuration(s.ridingTimeMillis)}</span>
           </div>
         </div>
         <div className="flex gap-6 text-sm mt-1">
           <div>
-            <span className="text-gray-500">평속</span>
+            <span className="text-gray-500 dark:text-gray-400">평속</span>
             <span className="ml-1.5 font-semibold">{s.averageSpeed.toFixed(1)} km/h</span>
           </div>
           {s.averagePower != null && (
             <div>
-              <span className="text-gray-500">파워</span>
+              <span className="text-gray-500 dark:text-gray-400">파워</span>
               <span className="ml-1.5 font-semibold">{s.averagePower} W</span>
             </div>
           )}
           {s.averageHeartRate != null && (
             <div>
-              <span className="text-gray-500">심박</span>
+              <span className="text-gray-500 dark:text-gray-400">심박</span>
               <span className="ml-1.5 font-semibold">{s.averageHeartRate} bpm</span>
             </div>
           )}
@@ -127,14 +157,14 @@ export default function ActivityCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
             <div className="flex gap-2">
-              <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-md text-xs font-semibold text-gray-800 shadow-sm">
+              <span className="px-2 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-md text-xs font-semibold text-gray-800 dark:text-gray-200 shadow-sm">
                 {(s.distance / 1000).toFixed(1)} km
               </span>
-              <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-md text-xs font-semibold text-gray-800 shadow-sm">
+              <span className="px-2 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-md text-xs font-semibold text-gray-800 dark:text-gray-200 shadow-sm">
                 {formatDuration(s.ridingTimeMillis)}
               </span>
               {s.elevationGain > 0 && (
-                <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-md text-xs font-semibold text-green-700 shadow-sm">
+                <span className="px-2 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-md text-xs font-semibold text-green-700 dark:text-green-400 shadow-sm">
                   ▲ {Math.round(s.elevationGain)}m
                 </span>
               )}
@@ -144,13 +174,20 @@ export default function ActivityCard({
       )}
 
       {/* Footer: kudos + comments */}
-      <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-4 text-sm text-gray-500">
-        <Link to={`/activity/${activity.id}`} className="flex items-center gap-1.5 hover:text-orange-500 transition-colors">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+        {/* Inline like toggle */}
+        <button
+          onClick={handleToggleKudos}
+          disabled={!user}
+          className={`flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+            liked ? "text-orange-500" : "hover:text-orange-500"
+          }`}
+        >
+          <svg className="w-4 h-4" fill={liked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
           </svg>
-          <span>{activity.kudosCount > 0 ? activity.kudosCount : "좋아요"}</span>
-        </Link>
+          <span>{localKudos > 0 ? localKudos : "좋아요"}</span>
+        </button>
         <Link
           to={`/activity/${activity.id}`}
           className="flex items-center gap-1.5 hover:text-orange-500 transition-colors"

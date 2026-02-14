@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -21,12 +22,21 @@ interface ComparisonChartProps {
   unit?: string;
 }
 
+function isDarkMode() {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
 export default function ComparisonChart({
   labels,
   datasets,
   height = 200,
   unit = "",
 }: ComparisonChartProps) {
+  const dark = useMemo(() => isDarkMode(), []);
+  const tickColor = dark ? "#6b7280" : "#9ca3af";
+  const labelColor = dark ? "#9ca3af" : "#6b7280";
+  const gridColor = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+
   const chartData = {
     labels,
     datasets: datasets.map((ds) => ({
@@ -49,7 +59,7 @@ export default function ComparisonChart({
           plugins: {
             legend: {
               position: "bottom",
-              labels: { font: { size: 11 }, padding: 12, usePointStyle: true },
+              labels: { font: { size: 11 }, padding: 12, usePointStyle: true, color: labelColor },
             },
             tooltip: {
               callbacks: {
@@ -61,14 +71,14 @@ export default function ComparisonChart({
           scales: {
             x: {
               grid: { display: false },
-              ticks: { font: { size: 11 }, color: "#6b7280" },
+              ticks: { font: { size: 11 }, color: labelColor },
             },
             y: {
               beginAtZero: true,
-              grid: { color: "rgba(0,0,0,0.04)" },
+              grid: { color: gridColor },
               ticks: {
                 font: { size: 10 },
-                color: "#9ca3af",
+                color: tickColor,
                 callback: (v) => `${v}${unit}`,
               },
             },

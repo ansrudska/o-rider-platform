@@ -11,6 +11,7 @@ import { useAuth } from "../contexts/AuthContext";
 import StatCard from "../components/StatCard";
 import ActivityCard from "../components/ActivityCard";
 import Avatar from "../components/Avatar";
+import WeeklyChart from "../components/WeeklyChart";
 import type { Activity, UserProfile } from "@shared/types";
 
 function formatHours(ms: number): string {
@@ -36,6 +37,9 @@ export default function AthletePage() {
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+
+  // Activity filter
+  const [filterType, setFilterType] = useState<"all" | "ride" | "strava">("all");
 
   useEffect(() => {
     if (!userId) return;
@@ -131,17 +135,55 @@ export default function AthletePage() {
     [activities],
   );
 
+  const monthlyStats = useMemo(() => {
+    const months = new Map<string, { distance: number; time: number; elevation: number; rides: number }>();
+    for (const a of activities) {
+      const d = new Date(a.createdAt);
+      const key = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const existing = months.get(key) ?? { distance: 0, time: 0, elevation: 0, rides: 0 };
+      existing.distance += a.summary.distance / 1000;
+      existing.time += a.summary.ridingTimeMillis / 3600000;
+      existing.elevation += a.summary.elevationGain;
+      existing.rides += 1;
+      months.set(key, existing);
+    }
+    return Array.from(months.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([week, data]) => ({ week, ...data }));
+  }, [activities]);
+
+  const filteredActivities = activities.filter((a) => {
+    if (filterType === "all") return true;
+    const isStrava = (a as Activity & { source?: string }).source === "strava";
+    return filterType === "strava" ? isStrava : !isStrava;
+  });
+
   if (profileLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-6">
+        <div className="relative">
+          <div className="bg-gray-200 dark:bg-gray-700 rounded-xl h-40 animate-pulse" />
+          <div className="absolute -bottom-10 left-6">
+            <div className="w-20 h-20 rounded-full bg-gray-300 dark:bg-gray-600 ring-4 ring-white dark:ring-gray-900 animate-pulse" />
+          </div>
+        </div>
+        <div className="pt-8 space-y-2">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-40 animate-pulse" />
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4 h-20 animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!nickname) {
     return (
-      <div className="text-center py-12 text-gray-500">
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
         사용자를 찾을 수 없습니다.
       </div>
     );
@@ -163,7 +205,7 @@ export default function AthletePage() {
           </svg>
         </div>
         <div className="absolute -bottom-10 left-6 flex items-end gap-4">
-          <div className="ring-4 ring-white rounded-full bg-white shadow-md">
+          <div className="ring-4 ring-white dark:ring-gray-900 rounded-full bg-white dark:bg-gray-900 shadow-md">
             {photoURL ? (
               <img
                 src={photoURL}
@@ -181,13 +223,13 @@ export default function AthletePage() {
       {/* Profile info */}
       <div className="pt-8 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">
             {nickname}
             {friendCode && <span className="text-sm font-normal text-blue-500 ml-2">({friendCode})</span>}
           </h1>
-          <div className="flex gap-4 mt-2 text-sm text-gray-600">
-            <span><strong className="text-gray-900">{followerCount}</strong> 팔로워</span>
-            <span><strong className="text-gray-900">{followingCount}</strong> 팔로잉</span>
+          <div className="flex gap-4 mt-2 text-sm text-gray-600 dark:text-gray-300">
+            <span><strong className="text-gray-900 dark:text-gray-50">{followerCount}</strong> 팔로워</span>
+            <span><strong className="text-gray-900 dark:text-gray-50">{followingCount}</strong> 팔로잉</span>
           </div>
         </div>
         {!isMe && currentUser && (
@@ -196,7 +238,7 @@ export default function AthletePage() {
             disabled={followLoading}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               following
-                ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                ? "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                 : "bg-orange-500 text-white hover:bg-orange-600"
             } disabled:opacity-50`}
           >
@@ -229,20 +271,49 @@ export default function AthletePage() {
         />
       </div>
 
+      {/* Monthly activity trend chart */}
+      {monthlyStats.length > 1 && (
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">월별 활동 추이</h3>
+          <WeeklyChart data={monthlyStats} dataKey="distance" height={160} />
+        </div>
+      )}
+
       {/* Activity feed */}
       <div>
-        <h2 className="text-lg font-semibold mb-3">최근 활동</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">최근 활동</h2>
+          <div className="flex gap-1">
+            {([
+              { id: "all" as const, label: "전체" },
+              { id: "strava" as const, label: "Strava" },
+              { id: "ride" as const, label: "직접 기록" },
+            ]).map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setFilterType(f.id)}
+                className={`px-3 py-1 text-xs rounded-full font-medium transition-colors ${
+                  filterType === f.id
+                    ? "bg-orange-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="space-y-4">
           {activitiesLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="w-6 h-6 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : activities.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
+          ) : filteredActivities.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
               아직 활동이 없습니다.
             </p>
           ) : (
-            activities.map((activity) => (
+            filteredActivities.map((activity) => (
               <ActivityCard
                 key={activity.id}
                 activity={activity}

@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import type { ChartEvent, ActiveElement, Chart, Plugin } from "chart.js";
 import {
@@ -22,6 +22,10 @@ ChartJS.register(
   Legend,
 );
 
+function isDarkMode() {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
 const crosshairPlugin: Plugin<"line"> = {
   id: "crosshair",
   beforeDraw(chart) {
@@ -34,7 +38,7 @@ const crosshairPlugin: Plugin<"line"> = {
     const ctx = chart.ctx;
     ctx.save();
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    ctx.strokeStyle = isDarkMode() ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, area.top);
@@ -83,6 +87,10 @@ export default function ElevationChart({
     onHoverIndex?.(null);
   }, [onHoverIndex]);
 
+  const dark = useMemo(() => isDarkMode(), []);
+  const tickColor = dark ? "#6b7280" : "#9ca3af";
+  const gridColor = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+
   const chartData = {
     labels: data.map((d) => `${(d.distance / 1000).toFixed(1)}`),
     datasets: [
@@ -90,13 +98,13 @@ export default function ElevationChart({
         label: "\uACE0\uB3C4 (m)",
         data: data.map((d) => d.elevation),
         fill: true,
-        backgroundColor: "rgba(34, 197, 94, 0.08)",
+        backgroundColor: dark ? "rgba(34, 197, 94, 0.12)" : "rgba(34, 197, 94, 0.08)",
         borderColor: "#22c55e",
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5,
         pointHoverBackgroundColor: "#F97316",
-        pointHoverBorderColor: "#fff",
+        pointHoverBorderColor: dark ? "#1f2937" : "#fff",
         pointHoverBorderWidth: 2,
         tension: 0.4,
         yAxisID: "yElev",
@@ -147,15 +155,15 @@ export default function ElevationChart({
               grid: { display: false },
               ticks: {
                 font: { size: 10 },
-                color: "#9ca3af",
+                color: tickColor,
                 maxTicksLimit: 10,
               },
-              title: { display: true, text: "km", font: { size: 10 }, color: "#9ca3af" },
+              title: { display: true, text: "km", font: { size: 10 }, color: tickColor },
             },
             yElev: {
               type: "linear",
               position: "left",
-              grid: { color: "rgba(0,0,0,0.04)" },
+              grid: { color: gridColor },
               ticks: {
                 font: { size: 10 },
                 color: "rgba(34,197,94,0.6)",

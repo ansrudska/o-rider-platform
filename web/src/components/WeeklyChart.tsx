@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -28,12 +29,19 @@ const LABEL_MAP = {
   elevation: { label: "고도 (m)", color: "rgba(34, 197, 94, 0.7)" },
 };
 
+function isDarkMode() {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
 export default function WeeklyChart({
   data,
   dataKey = "distance",
   height = 150,
 }: WeeklyChartProps) {
   const config = LABEL_MAP[dataKey];
+  const dark = useMemo(() => isDarkMode(), []);
+  const tickColor = dark ? "#6b7280" : "#9ca3af";
+  const gridColor = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
 
   const chartData = {
     labels: data.map((d) => d.week),
@@ -64,12 +72,12 @@ export default function WeeklyChart({
           scales: {
             x: {
               grid: { display: false },
-              ticks: { font: { size: 10 }, color: "#9ca3af" },
+              ticks: { font: { size: 10 }, color: tickColor },
             },
             y: {
               beginAtZero: true,
-              grid: { color: "rgba(0,0,0,0.04)" },
-              ticks: { font: { size: 10 }, color: "#9ca3af" },
+              grid: { color: gridColor },
+              ticks: { font: { size: 10 }, color: tickColor },
             },
           },
         }}

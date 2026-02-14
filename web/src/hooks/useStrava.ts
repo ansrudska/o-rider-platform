@@ -141,12 +141,12 @@ export function useStrava() {
     }
   }, []);
 
-  const fixMigration = useCallback(async () => {
+  const fixMigration = useCallback(async (scope?: { includePhotos: boolean; includeSegments: boolean }) => {
     setLoading(true);
     setError(null);
     try {
       const fn = httpsCallable(functions, "stravaMigrationFix");
-      const result = await fn();
+      const result = await fn(scope ? { scope } : {});
       return result.data as { activitiesImported: number; streamsQueued: number };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Fix failed";

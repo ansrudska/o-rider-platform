@@ -5,12 +5,14 @@ import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from "f
 import { ref, get } from "firebase/database";
 import { firestore, database, functions } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 import { useStrava } from "../hooks/useStrava";
 import { useExport } from "../hooks/useExport";
 import type { Visibility } from "@shared/types";
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
+  const { showToast } = useToast();
   const { connectStrava, disconnectStrava, deleteUserData, loading, error } = useStrava();
   const { exportData, loading: exportLoading, error: exportError, progress: exportProgress } = useExport();
   const [deleteResult, setDeleteResult] = useState<{ deletedActivities: number; deletedStreams: number } | null>(null);
@@ -32,7 +34,7 @@ export default function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="text-center py-12 text-gray-500">
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
         설정을 보려면 로그인이 필요합니다.
       </div>
     );
@@ -54,6 +56,7 @@ export default function SettingsPage() {
         activitiesSnap.docs.forEach((d) => batch.update(d.ref, { nickname: trimmed }));
         await batch.commit();
       }
+      showToast("닉네임이 변경되었습니다");
       setEditingNickname(false);
     } finally {
       setNicknameSaving(false);
@@ -64,6 +67,7 @@ export default function SettingsPage() {
     if (!window.confirm("Strava 연동을 해제하시겠습니까?")) return;
     try {
       await disconnectStrava();
+      showToast("Strava 연동이 해제되었습니다");
     } catch {
       // error is set in hook
     }
@@ -85,7 +89,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold">설정</h1>
 
       {/* Profile section */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <h2 className="text-lg font-semibold mb-4">프로필</h2>
         <div className="flex items-center gap-4">
           {user.photoURL ? (
@@ -116,7 +120,7 @@ export default function SettingsPage() {
                   }}
                   maxLength={20}
                   autoFocus
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-orange-400 w-48"
+                  className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:border-orange-400 w-48 dark:bg-gray-900 dark:text-gray-50"
                 />
                 <button
                   onClick={handleSaveNickname}
@@ -127,7 +131,7 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={() => setEditingNickname(false)}
-                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                 >
                   취소
                 </button>
@@ -140,7 +144,7 @@ export default function SettingsPage() {
                     setNicknameInput(profile?.nickname ?? user.displayName ?? "");
                     setEditingNickname(true);
                   }}
-                  className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-orange-500 transition-colors"
                 >
                   수정
                 </button>
@@ -148,11 +152,11 @@ export default function SettingsPage() {
             )}
             {friendCode && (
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-gray-500">친구 코드</span>
-                <span className="font-mono font-semibold text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{friendCode}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">친구 코드</span>
+                <span className="font-mono font-semibold text-sm text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded">{friendCode}</span>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(friendCode); }}
-                  className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
+                  onClick={() => { navigator.clipboard.writeText(friendCode); showToast("복사되었습니다"); }}
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-orange-500 transition-colors"
                   title="복사"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -166,9 +170,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Visibility section */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <h2 className="text-lg font-semibold mb-4">공개 범위</h2>
-        <p className="text-sm text-gray-500 mb-3">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
           새로 가져오는 활동의 기본 공개 범위를 설정합니다.
         </p>
         <div className="flex items-center gap-3">
@@ -186,8 +190,8 @@ export default function SettingsPage() {
                 }}
                 className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
                   (selectedVisibility ?? currentVisibility) === opt.value
-                    ? "bg-orange-50 border-orange-300 text-orange-700 font-medium"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    ? "bg-orange-50 dark:bg-orange-900/20 border-orange-300 text-orange-700 font-medium"
+                    : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                 }`}
               >
                 {opt.label}
@@ -225,9 +229,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Data export section */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <h2 className="text-lg font-semibold mb-2">데이터 내보내기</h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           모든 라이딩 기록, 사진, 댓글, 소셜 데이터를 ZIP 파일로 내보냅니다.
         </p>
 
@@ -244,7 +248,7 @@ export default function SettingsPage() {
 
         {exportProgress && (
           <div className="mt-4">
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
               <div
                 className="bg-orange-500 h-2.5 rounded-full transition-all duration-300"
                 style={{
@@ -266,23 +270,23 @@ export default function SettingsPage() {
                 }}
               />
             </div>
-            <p className="text-sm text-gray-600 mt-1.5">{exportProgress.label}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5">{exportProgress.label}</p>
           </div>
         )}
 
         {exportError && (
-          <div className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
+          <div className="mt-3 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded">
             {exportError}
           </div>
         )}
 
-        <div className="mt-4 text-xs text-gray-400">
+        <div className="mt-4 text-xs text-gray-400 dark:text-gray-500">
           포함 항목: GPX 트랙, 요약 CSV, 댓글, 좋아요, 사진, 세그먼트 PR, 팔로잉/팔로워
         </div>
       </div>
 
       {/* Strava section */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Strava 연동</h2>
           {profile?.stravaConnected && (
@@ -295,9 +299,9 @@ export default function SettingsPage() {
 
         {profile?.stravaConnected ? (
           <div className="space-y-4">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-gray-300">
               Strava 계정: <strong>{profile.stravaNickname}</strong>
-              <span className="text-gray-400 ml-2">
+              <span className="text-gray-400 dark:text-gray-500 ml-2">
                 (ID: {profile.stravaAthleteId})
               </span>
             </div>
@@ -305,7 +309,7 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <Link
                 to="/migrate"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -323,27 +327,27 @@ export default function SettingsPage() {
                     } catch { /* error in hook */ }
                   }}
                   disabled={loading}
-                  className="px-4 py-2 text-sm text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 text-sm text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 transition-colors"
                 >
                   {loading ? "처리 중..." : "스트림 캐시 초기화"}
                 </button>
                 <button
                   onClick={handleDeleteData}
                   disabled={loading}
-                  className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
                 >
                   {loading ? "삭제 중..." : "Strava 데이터 삭제"}
                 </button>
                 <button
                   onClick={handleDisconnect}
                   disabled={loading}
-                  className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
                 >
                   Strava 연동 해제
                 </button>
               </div>
               {deleteResult && (
-                <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded">
+                <div className="text-sm text-green-600 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded">
                   삭제 완료: 활동 {deleteResult.deletedActivities}개, 스트림 {deleteResult.deletedStreams}개
                 </div>
               )}
@@ -351,7 +355,7 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
               Strava 계정을 연동하면 라이딩 활동을 자동으로 가져올 수 있습니다.
             </p>
             <button
@@ -367,7 +371,7 @@ export default function SettingsPage() {
         )}
 
         {error && (
-          <div className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
+          <div className="mt-3 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded">
             {error}
           </div>
         )}

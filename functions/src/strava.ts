@@ -2,6 +2,8 @@ import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
+import * as zlib from "zlib";
+import { randomUUID } from "crypto";
 
 const STRAVA_CLIENT_ID = defineSecret("STRAVA_CLIENT_ID");
 const STRAVA_CLIENT_SECRET = defineSecret("STRAVA_CLIENT_SECRET");
@@ -63,6 +65,30 @@ function extractSegmentLatlng(
   }
   sampled.push(slice[slice.length - 1]);
   return sampled;
+}
+
+function gcsDownloadUrl(bucketName: string, gcsPath: string, token: string): string {
+  return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(gcsPath)}?alt=media&token=${token}`;
+}
+
+async function downloadPhotoToGCS(
+  cdnUrl: string,
+  gcsPath: string,
+  bucket: ReturnType<typeof admin.storage.prototype.bucket>,
+): Promise<string> {
+  const resp = await fetch(cdnUrl);
+  if (!resp.ok) throw new Error(`Photo fetch failed: ${resp.status}`);
+
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  const contentType = resp.headers.get("content-type") ?? "image/jpeg";
+  const token = randomUUID();
+
+  await bucket.file(gcsPath).save(buffer, {
+    contentType,
+    metadata: { firebaseStorageDownloadTokens: token },
+  });
+
+  return gcsDownloadUrl(bucket.name, gcsPath, token);
 }
 
 interface StravaActivity {
@@ -206,18 +232,26 @@ export const stravaGetActivityStreams = onCall(
     const cached = await cacheRef.get();
     if (cached.exists) {
       const cachedData = cached.data()!;
-      if (typeof cachedData.json === "string") {
-        const parsed = JSON.parse(cachedData.json);
-        // Cache v4+: must have _cacheVersion to ensure complete data
-        if (parsed._cacheVersion >= 4) {
-          return parsed;
+      if (cachedData._cacheVersion >= 4) {
+        if (cachedData.storage === "gcs" && cachedData.gcsPath) {
+          // GCS cache
+          const [content] = await admin.storage().bucket().file(cachedData.gcsPath).download();
+          return JSON.parse(zlib.gunzipSync(content).toString());
+        } else if (typeof cachedData.json === "string") {
+          // Legacy Firestore cache
+          const parsed = JSON.parse(cachedData.json);
+          if (parsed._cacheVersion >= 4) {
+            return parsed;
+          }
         }
+      }
+      // Outdated cache — re-fetch
+      if (typeof cachedData.json === "string") {
         console.log(`[stravaStreams] Cache missing segments for ${stravaActivityId}, re-fetching`);
-        await cacheRef.delete();
       } else {
         console.log(`[stravaStreams] Old cache for ${stravaActivityId}, re-fetching`);
-        await cacheRef.delete();
       }
+      await cacheRef.delete();
     }
 
     const accessToken = await getValidAccessToken(uid);
@@ -261,38 +295,13 @@ export const stravaGetActivityStreams = onCall(
       }
     }
 
-    // Extract segment efforts from activity detail
+    // ── Parse API responses (no writes yet) ──
+
+    // Segments
+    let segmentWriteBatch: ReturnType<typeof db.batch> | null = null;
+    let segLogMsg = "";
     if (detailResp.ok) {
       const detail = await detailResp.json();
-      interface StravaSegmentEffort {
-        id: number;
-        name: string;
-        elapsed_time: number;
-        moving_time: number;
-        distance: number;
-        start_index: number;
-        end_index: number;
-        average_watts?: number;
-        average_heartrate?: number;
-        max_heartrate?: number;
-        average_cadence?: number;
-        pr_rank?: number | null;
-        kom_rank?: number | null;
-        achievements?: { type_id: number; type: string; rank: number }[];
-        segment: {
-          id: number;
-          name: string;
-          distance: number;
-          average_grade: number;
-          maximum_grade: number;
-          elevation_high: number;
-          elevation_low: number;
-          climb_category: number;
-          city?: string;
-          state?: string;
-          starred: boolean;
-        };
-      }
       const efforts = (detail.segment_efforts ?? []) as StravaSegmentEffort[];
       streamData.segment_efforts = efforts.map((e) => ({
         id: e.id,
@@ -323,113 +332,120 @@ export const stravaGetActivityStreams = onCall(
       }));
       console.log(`[stravaStreams] activity=${stravaActivityId} segments=${efforts.length}`);
 
-      // ── Step 1: Save segments & efforts to O-Rider DB ──
-      const latlngArr = streamData.latlng as [number, number][] | undefined;
-      const batch = db.batch();
-      let segSaved = 0;
-      let effortSaved = 0;
+      if (efforts.length > 0) {
+        const latlngArr = streamData.latlng as [number, number][] | undefined;
+        const segRefs = efforts.map((e) => db.doc(`segments/strava_${e.segment.id}`));
+        const segDocs = await db.getAll(...segRefs);
+        const existingSegs = new Set(segDocs.filter((d) => d.exists).map((d) => d.id));
 
-      for (const e of efforts) {
-        const seg = e.segment;
-        const segDocId = `strava_${seg.id}`;
-        const segRef = db.doc(`segments/${segDocId}`);
+        segmentWriteBatch = db.batch();
+        let segSaved = 0;
+        for (const e of efforts) {
+          const seg = e.segment;
+          const segDocId = `strava_${seg.id}`;
 
-        // Derive start/end GPS from stream latlng using effort indices
-        const startLatlng = latlngArr?.[e.start_index] ?? null;
-        const endLatlng = latlngArr?.[e.end_index] ?? null;
+          if (!existingSegs.has(segDocId)) {
+            const segmentLatlng = extractSegmentLatlng(latlngArr, e.start_index, e.end_index);
+            segmentWriteBatch.set(db.doc(`segments/${segDocId}`), {
+              name: seg.name,
+              distance: seg.distance,
+              averageGrade: seg.average_grade,
+              maximumGrade: seg.maximum_grade,
+              elevationHigh: seg.elevation_high,
+              elevationLow: seg.elevation_low,
+              climbCategory: seg.climb_category,
+              city: seg.city ?? null,
+              state: seg.state ?? null,
+              startLatlng: latlngArr?.[e.start_index] ?? null,
+              endLatlng: latlngArr?.[e.end_index] ?? null,
+              ...(segmentLatlng ? { segmentLatlng: JSON.stringify(segmentLatlng) } : {}),
+              source: "strava",
+              stravaSegmentId: seg.id,
+              updatedAt: Date.now(),
+            });
+            segSaved++;
+          }
 
-        // Extract segment route from activity GPS stream
-        const segmentLatlng = extractSegmentLatlng(latlngArr, e.start_index, e.end_index);
-
-        // Upsert segment (merge to keep existing data like polyline)
-        batch.set(segRef, {
-          name: seg.name,
-          distance: seg.distance,
-          averageGrade: seg.average_grade,
-          maximumGrade: seg.maximum_grade,
-          elevationHigh: seg.elevation_high,
-          elevationLow: seg.elevation_low,
-          climbCategory: seg.climb_category,
-          city: seg.city ?? null,
-          state: seg.state ?? null,
-          startLatlng: startLatlng,
-          endLatlng: endLatlng,
-          ...(segmentLatlng ? { segmentLatlng: JSON.stringify(segmentLatlng) } : {}),
-          source: "strava",
-          stravaSegmentId: seg.id,
-          updatedAt: Date.now(),
-        }, { merge: true });
-        segSaved++;
-
-        // Save effort
-        const effortDocId = `strava_${e.id}`;
-        const effortRef = db.doc(`segment_efforts/${segDocId}/efforts/${effortDocId}`);
-        const startDate = detail.start_date
-          ? new Date(detail.start_date as string).getTime()
-          : Date.now();
-
-        batch.set(effortRef, {
-          segmentId: segDocId,
-          activityId: `strava_${stravaActivityId}`,
-          userId: uid,
-          nickname,
-          profileImage,
-          elapsedTime: e.elapsed_time * 1000,
-          movingTime: e.moving_time * 1000,
-          distance: e.distance,
-          averageSpeed: e.distance > 0 && e.moving_time > 0
-            ? (e.distance / e.moving_time) * 3.6 : 0,
-          averageWatts: e.average_watts ?? null,
-          averageHeartrate: e.average_heartrate ?? null,
-          maxHeartrate: e.max_heartrate ?? null,
-          averageCadence: e.average_cadence ?? null,
-          prRank: e.pr_rank ?? null,
-          komRank: e.kom_rank ?? null,
-          startDate,
-          source: "strava",
-          stravaEffortId: e.id,
-          createdAt: Date.now(),
-        }, { merge: true });
-        effortSaved++;
-      }
-
-      if (segSaved > 0 || effortSaved > 0) {
-        await batch.commit();
-        console.log(`[stravaStreams] Saved ${segSaved} segments, ${effortSaved} efforts to DB`);
+          const effortDocId = `strava_${e.id}`;
+          const startDate = detail.start_date
+            ? new Date(detail.start_date as string).getTime()
+            : Date.now();
+          segmentWriteBatch.set(db.doc(`segment_efforts/${segDocId}/efforts/${effortDocId}`), {
+            segmentId: segDocId,
+            activityId: `strava_${stravaActivityId}`,
+            userId: uid,
+            nickname,
+            profileImage,
+            elapsedTime: e.elapsed_time * 1000,
+            movingTime: e.moving_time * 1000,
+            distance: e.distance,
+            averageSpeed: e.distance > 0 && e.moving_time > 0
+              ? (e.distance / e.moving_time) * 3.6 : 0,
+            averageWatts: e.average_watts ?? null,
+            averageHeartrate: e.average_heartrate ?? null,
+            maxHeartrate: e.max_heartrate ?? null,
+            averageCadence: e.average_cadence ?? null,
+            prRank: e.pr_rank ?? null,
+            komRank: e.kom_rank ?? null,
+            startDate,
+            source: "strava",
+            stravaEffortId: e.id,
+            createdAt: Date.now(),
+          }, { merge: true });
+        }
+        segLogMsg = `${segSaved} new segments, ${efforts.length} efforts (${existingSegs.size} skipped)`;
       }
     }
 
-    // Extract photos
+    // Photos — download to GCS
+    const bucket = admin.storage().bucket();
+    const photoResults: { id: string; url: string; caption: string | null; location: [number, number] | null }[] = [];
     if (photosResp.ok) {
-      interface StravaPhoto {
-        unique_id: string;
-        urls: Record<string, string>;
-        caption?: string;
-        location?: [number, number];
-        created_at?: string;
-      }
       const photos = (await photosResp.json()) as StravaPhoto[];
       if (photos.length > 0) {
-        streamData.photos = photos.map((p) => ({
-          id: p.unique_id,
-          url: p.urls?.["600"] ?? p.urls?.["100"] ?? Object.values(p.urls ?? {})[0] ?? null,
-          caption: p.caption ?? null,
-          location: p.location ?? null,
-        }));
-        console.log(`[stravaStreams] activity=${stravaActivityId} photos=${photos.length}`);
+        const photoPromises = photos.map(async (p, i) => {
+          const cdnUrl = p.urls?.["600"] ?? p.urls?.["100"] ?? Object.values(p.urls ?? {})[0] ?? null;
+          if (!cdnUrl) return;
+          try {
+            const ext = cdnUrl.includes(".png") ? "png" : "jpg";
+            const photoGcsPath = `photos/${uid}/${stravaActivityId}/${i}.${ext}`;
+            const gcsUrl = await downloadPhotoToGCS(cdnUrl, photoGcsPath, bucket);
+            photoResults.push({ id: p.unique_id, url: gcsUrl, caption: p.caption ?? null, location: p.location ?? null });
+          } catch (e) {
+            console.warn(`[stravaStreams] Photo ${i} download failed:`, e);
+            photoResults.push({ id: p.unique_id, url: cdnUrl, caption: p.caption ?? null, location: p.location ?? null });
+          }
+        });
+        await Promise.all(photoPromises);
+        streamData.photos = photoResults;
+        console.log(`[stravaStreams] activity=${stravaActivityId} photos=${photoResults.length} saved to GCS`);
       }
     }
 
-    console.log(`[stravaStreams] activity=${stravaActivityId} keys=${Object.keys(streamData).filter((k) => k !== "userId").join(",")}`);
-
-    // Mark cache version for validation
+    // Mark cache version
     streamData._cacheVersion = 4;
 
-    // Cache as JSON string (avoids nested array & index limit issues)
+    // ── Parallel storage: GCS stream + Firestore index + segments ──
+    const storagePromises: Promise<unknown>[] = [];
+
     const jsonStr = JSON.stringify(streamData);
-    if (jsonStr.length < 1_000_000) {
-      await cacheRef.set({ userId: uid, json: jsonStr });
+    const compressed = zlib.gzipSync(Buffer.from(jsonStr));
+    const gcsPath = `streams/${uid}/${stravaActivityId}.json.gz`;
+    storagePromises.push(
+      bucket.file(gcsPath).save(compressed, {
+        contentType: "application/gzip",
+        metadata: { cacheVersion: "4" },
+      }),
+    );
+    storagePromises.push(
+      cacheRef.set({ userId: uid, storage: "gcs", gcsPath, _cacheVersion: 4 }),
+    );
+    if (segmentWriteBatch) {
+      storagePromises.push(segmentWriteBatch.commit());
     }
+
+    await Promise.all(storagePromises);
+    if (segLogMsg) console.log(`[stravaStreams] ${segLogMsg}`);
 
     return streamData;
   },
@@ -580,7 +596,11 @@ async function fetchAndCacheStreams(
     apiCalls++;
   }
 
-  // Process segments
+  // ── Parse API responses (no writes yet) ──
+
+  // Segments
+  let segmentWriteBatch: ReturnType<typeof db.batch> | null = null;
+  let segLogMsg = "";
   if (detailResp?.ok) {
     const detail = await detailResp.json();
     const efforts = (detail.segment_efforts ?? []) as StravaSegmentEffort[];
@@ -612,97 +632,154 @@ async function fetchAndCacheStreams(
       },
     }));
 
-    // Save segments & efforts to DB
-    const latlngArr = streamData.latlng as [number, number][] | undefined;
-    const batch = db.batch();
-    for (const e of efforts) {
-      const seg = e.segment;
-      const segDocId = `strava_${seg.id}`;
-      const segmentLatlng = extractSegmentLatlng(latlngArr, e.start_index, e.end_index);
-      batch.set(db.doc(`segments/${segDocId}`), {
-        name: seg.name,
-        distance: seg.distance,
-        averageGrade: seg.average_grade,
-        maximumGrade: seg.maximum_grade,
-        elevationHigh: seg.elevation_high,
-        elevationLow: seg.elevation_low,
-        climbCategory: seg.climb_category,
-        city: seg.city ?? null,
-        state: seg.state ?? null,
-        startLatlng: latlngArr?.[e.start_index] ?? null,
-        endLatlng: latlngArr?.[e.end_index] ?? null,
-        ...(segmentLatlng ? { segmentLatlng: JSON.stringify(segmentLatlng) } : {}),
-        source: "strava",
-        stravaSegmentId: seg.id,
-        updatedAt: Date.now(),
-      }, { merge: true });
+    if (efforts.length > 0) {
+      const latlngArr = streamData.latlng as [number, number][] | undefined;
+      const segRefs = efforts.map((e) => db.doc(`segments/strava_${e.segment.id}`));
+      const segDocs = await db.getAll(...segRefs);
+      const existingSegs = new Set(segDocs.filter((d) => d.exists).map((d) => d.id));
 
-      const effortDocId = `strava_${e.id}`;
-      const startDate = detail.start_date
-        ? new Date(detail.start_date as string).getTime()
-        : Date.now();
-      batch.set(db.doc(`segment_efforts/${segDocId}/efforts/${effortDocId}`), {
-        segmentId: segDocId,
-        activityId: `strava_${stravaActivityId}`,
-        userId: uid,
-        nickname,
-        profileImage,
-        elapsedTime: e.elapsed_time * 1000,
-        movingTime: e.moving_time * 1000,
-        distance: e.distance,
-        averageSpeed: e.distance > 0 && e.moving_time > 0 ? (e.distance / e.moving_time) * 3.6 : 0,
-        averageWatts: e.average_watts ?? null,
-        averageHeartrate: e.average_heartrate ?? null,
-        maxHeartrate: e.max_heartrate ?? null,
-        averageCadence: e.average_cadence ?? null,
-        prRank: e.pr_rank ?? null,
-        komRank: e.kom_rank ?? null,
-        startDate,
-        source: "strava",
-        stravaEffortId: e.id,
-        createdAt: Date.now(),
-      }, { merge: true });
+      segmentWriteBatch = db.batch();
+      let newSegs = 0;
+      for (const e of efforts) {
+        const seg = e.segment;
+        const segDocId = `strava_${seg.id}`;
+
+        if (!existingSegs.has(segDocId)) {
+          const segmentLatlng = extractSegmentLatlng(latlngArr, e.start_index, e.end_index);
+          segmentWriteBatch.set(db.doc(`segments/${segDocId}`), {
+            name: seg.name,
+            distance: seg.distance,
+            averageGrade: seg.average_grade,
+            maximumGrade: seg.maximum_grade,
+            elevationHigh: seg.elevation_high,
+            elevationLow: seg.elevation_low,
+            climbCategory: seg.climb_category,
+            city: seg.city ?? null,
+            state: seg.state ?? null,
+            startLatlng: latlngArr?.[e.start_index] ?? null,
+            endLatlng: latlngArr?.[e.end_index] ?? null,
+            ...(segmentLatlng ? { segmentLatlng: JSON.stringify(segmentLatlng) } : {}),
+            source: "strava",
+            stravaSegmentId: seg.id,
+            updatedAt: Date.now(),
+          });
+          newSegs++;
+        }
+
+        const effortDocId = `strava_${e.id}`;
+        const startDate = detail.start_date
+          ? new Date(detail.start_date as string).getTime()
+          : Date.now();
+        segmentWriteBatch.set(db.doc(`segment_efforts/${segDocId}/efforts/${effortDocId}`), {
+          segmentId: segDocId,
+          activityId: `strava_${stravaActivityId}`,
+          userId: uid,
+          nickname,
+          profileImage,
+          elapsedTime: e.elapsed_time * 1000,
+          movingTime: e.moving_time * 1000,
+          distance: e.distance,
+          averageSpeed: e.distance > 0 && e.moving_time > 0 ? (e.distance / e.moving_time) * 3.6 : 0,
+          averageWatts: e.average_watts ?? null,
+          averageHeartrate: e.average_heartrate ?? null,
+          maxHeartrate: e.max_heartrate ?? null,
+          averageCadence: e.average_cadence ?? null,
+          prRank: e.pr_rank ?? null,
+          komRank: e.kom_rank ?? null,
+          startDate,
+          source: "strava",
+          stravaEffortId: e.id,
+          createdAt: Date.now(),
+        }, { merge: true });
+      }
+      segLogMsg = `${newSegs} new segments, ${efforts.length} efforts (${existingSegs.size} skipped)`;
     }
-    if (efforts.length > 0) await batch.commit();
   }
 
-  // Process photos
+  // Photos — parse URLs
+  const photoUrls: { id: string; cdnUrl: string; caption: string | null; location: [number, number] | null }[] = [];
   if (photosResp?.ok) {
     const photos = (await photosResp.json()) as StravaPhoto[];
-    if (photos.length > 0) {
-      streamData.photos = photos.map((p) => ({
-        id: p.unique_id,
-        url: p.urls?.["600"] ?? p.urls?.["100"] ?? Object.values(p.urls ?? {})[0] ?? null,
-        caption: p.caption ?? null,
-        location: p.location ?? null,
-      }));
+    for (const p of photos) {
+      const url = p.urls?.["600"] ?? p.urls?.["100"] ?? Object.values(p.urls ?? {})[0] ?? null;
+      if (url) {
+        photoUrls.push({ id: p.unique_id, cdnUrl: url, caption: p.caption ?? null, location: p.location ?? null });
+      }
     }
   }
 
-  // Only set default keys if the fetch actually succeeded.
-  // If fetch failed (e.g. rate limited), leave keys absent so stravaGetActivityStreams re-fetches.
+  // Set default keys for successful fetches
   if (includeSegments && detailResp?.ok && !("segment_efforts" in streamData)) streamData.segment_efforts = [];
   if (includePhotos && photosResp?.ok && !("photos" in streamData)) streamData.photos = [];
 
-  // Mark cache version for validation
+  // Mark cache version
   streamData._cacheVersion = 4;
 
-  // Cache as JSON string
+  // ── Parallel storage: GCS stream + Firestore index + segments + photos ──
   const cacheDocId = `strava_${stravaActivityId}`;
-  const jsonStr = JSON.stringify(streamData);
-  if (jsonStr.length < 1_000_000) {
-    await db.doc(`activity_streams/${cacheDocId}`).set({ userId: uid, json: jsonStr });
+  const bucket = admin.storage().bucket();
+  const storagePromises: Promise<unknown>[] = [];
+
+  // 1. Photo downloads → GCS (parallel, no Strava API rate limit)
+  const photoResults: { id: string; url: string; caption: string | null; location: [number, number] | null }[] = [];
+  if (photoUrls.length > 0) {
+    const photoPromises = photoUrls.map(async (p, i) => {
+      try {
+        const ext = p.cdnUrl.includes(".png") ? "png" : "jpg";
+        const photoGcsPath = `photos/${uid}/${stravaActivityId}/${i}.${ext}`;
+        const gcsUrl = await downloadPhotoToGCS(p.cdnUrl, photoGcsPath, bucket);
+        photoResults.push({ id: p.id, url: gcsUrl, caption: p.caption, location: p.location });
+      } catch (e) {
+        console.warn(`[fetchStreams] Photo ${i} download failed:`, e);
+        // Fallback to CDN URL
+        photoResults.push({ id: p.id, url: p.cdnUrl, caption: p.caption, location: p.location });
+      }
+    });
+    await Promise.all(photoPromises);
+    streamData.photos = photoResults;
   }
 
-  // Update activity doc with actual photo/segment counts
+  // 2. GCS stream upload (after photos are resolved so streamData includes GCS URLs)
+  const jsonStr = JSON.stringify(streamData);
+  const compressed = zlib.gzipSync(Buffer.from(jsonStr));
+  const gcsPath = `streams/${uid}/${stravaActivityId}.json.gz`;
+  storagePromises.push(
+    bucket.file(gcsPath).save(compressed, {
+      contentType: "application/gzip",
+      metadata: { cacheVersion: "4" },
+    }),
+  );
+
+  // 3. Firestore index
+  storagePromises.push(
+    db.doc(`activity_streams/${cacheDocId}`).set({
+      userId: uid,
+      storage: "gcs",
+      gcsPath,
+      _cacheVersion: 4,
+    }),
+  );
+
+  // 4. Segment batch commit
+  if (segmentWriteBatch) {
+    storagePromises.push(segmentWriteBatch.commit());
+  }
+
+  // 5. Activity doc photo/segment counts
   const photoCount = Array.isArray(streamData.photos) ? (streamData.photos as unknown[]).length : 0;
   const segmentCount = Array.isArray(streamData.segment_efforts) ? (streamData.segment_efforts as unknown[]).length : 0;
   if (photoCount > 0 || segmentCount > 0) {
-    await db.doc(`activities/${cacheDocId}`).set(
-      { photoCount, segmentEffortCount: segmentCount },
-      { merge: true },
+    storagePromises.push(
+      db.doc(`activities/${cacheDocId}`).set(
+        { photoCount, segmentEffortCount: segmentCount },
+        { merge: true },
+      ),
     );
   }
+
+  await Promise.all(storagePromises);
+  if (segLogMsg) console.log(`[fetchStreams] ${segLogMsg}`);
+  if (photoResults.length > 0) console.log(`[fetchStreams] ${photoResults.length} photos saved to GCS`);
 
   return { resp: streamsResp, apiCalls };
 }
@@ -1067,34 +1144,43 @@ async function processActivitiesJob(
   const CYCLING_TYPES = ["Ride", "VirtualRide", "EBikeRide", "Handcycle", "Velomobile"];
   const rides = stravaActivities.filter((a) => CYCLING_TYPES.includes(a.type));
 
+  // Bulk dedup: fetch all existing strava IDs and orider start times upfront
+  const [existingSnap, oriderSnap] = await Promise.all([
+    db.collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "strava")
+      .select("stravaActivityId")
+      .get(),
+    db.collection("activities")
+      .where("userId", "==", uid)
+      .where("source", "==", "orider")
+      .select("startTime")
+      .get(),
+  ]);
+  const existingStravaIds = new Set(existingSnap.docs.map((d) => d.data().stravaActivityId as number));
+  const oriderStartTimes = oriderSnap.docs.map((d) => d.data().startTime as number);
+
   const batch = db.batch();
   let imported = 0;
   let skipped = 0;
+  const FIVE_MIN = 5 * 60 * 1000;
 
   for (const sa of rides) {
+    if (existingStravaIds.has(sa.id)) {
+      skipped++;
+      continue;
+    }
+
+    // Dedup check against O-Rider activities in memory
+    const startTime = new Date(sa.start_date).getTime();
+    const hasDup = oriderStartTimes.some((t) => Math.abs(t - startTime) < FIVE_MIN);
+    if (hasDup) {
+      skipped++;
+      continue;
+    }
+
     const docId = `strava_${sa.id}`;
     const docRef = db.doc(`activities/${docId}`);
-    const existing = await docRef.get();
-    if (existing.exists) {
-      skipped++;
-      continue;
-    }
-
-    // Dedup check
-    const startTime = new Date(sa.start_date).getTime();
-    const FIVE_MIN = 5 * 60 * 1000;
-    const dupSnap = await db.collection("activities")
-      .where("userId", "==", uid)
-      .where("source", "==", "orider")
-      .where("startTime", ">=", startTime - FIVE_MIN)
-      .where("startTime", "<=", startTime + FIVE_MIN)
-      .limit(1)
-      .get();
-    if (!dupSnap.empty) {
-      skipped++;
-      continue;
-    }
-
     const activityData = convertStravaActivity(sa, uid, nickname);
     activityData.visibility = defaultVisibility;
     batch.set(docRef, activityData);
@@ -1155,9 +1241,8 @@ async function finishActivitiesPhase(
   uid: string,
   scope: { includePhotos?: boolean; includeSegments?: boolean },
 ) {
-  const needStreams = scope.includePhotos || scope.includeSegments;
-
-  if (needStreams) {
+  // Always fetch streams (GPS/sensor data is core); photos/segments are optional extras
+  {
     // Count uncached streams to determine total
     const activitiesSnap = await db.collection("activities")
       .where("userId", "==", uid)
@@ -1216,10 +1301,6 @@ async function finishActivitiesPhase(
     );
 
     console.log(`[queue] Activities done, created streams job: ${uncachedIds.length} to fetch`);
-  } else {
-    // No streams needed — complete migration
-    await jobRef.delete();
-    await completeMigration(uid);
   }
 }
 
@@ -1687,7 +1768,13 @@ export const stravaMigrationFix = onCall(async (request) => {
 
   const nickname = userData?.nickname ?? "Rider";
   const defaultVisibility = userData?.defaultVisibility ?? "everyone";
-  const scope = userData?.migration?.scope;
+  const originalScope = userData?.migration?.scope;
+  const requestScope = (request.data as { scope?: { includePhotos?: boolean; includeSegments?: boolean } } | undefined)?.scope;
+  const scope = {
+    ...originalScope,
+    includePhotos: requestScope?.includePhotos ?? originalScope?.includePhotos ?? false,
+    includeSegments: requestScope?.includeSegments ?? originalScope?.includeSegments ?? false,
+  };
 
   let activitiesImported = 0;
   let streamsQueued = 0;
@@ -1722,7 +1809,7 @@ export const stravaMigrationFix = onCall(async (request) => {
   // Deduplicate
   const uniqueStreamIds = [...new Set(allMissingStreamIds)];
 
-  if (uniqueStreamIds.length > 0 && (scope?.includePhotos || scope?.includeSegments)) {
+  if (uniqueStreamIds.length > 0) {
     const now = Date.now();
     await db.collection("strava_queue").doc().set({
       uid,

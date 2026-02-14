@@ -74,7 +74,7 @@ export default function ExplorePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">세그먼트 탐색</h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
           세그먼트를 찾아보고 도전해보세요
         </p>
       </div>
@@ -83,7 +83,7 @@ export default function ExplorePage() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -100,7 +100,7 @@ export default function ExplorePage() {
             placeholder="세그먼트 검색..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           />
         </div>
         <div className="flex gap-1">
@@ -111,7 +111,7 @@ export default function ExplorePage() {
               className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors whitespace-nowrap ${
                 category === cat.id
                   ? "bg-orange-500 text-white"
-                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
               }`}
             >
               {cat.icon} {cat.label}
@@ -126,7 +126,7 @@ export default function ExplorePage() {
           <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : sorted.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
           {segments.length === 0
             ? "세그먼트가 없습니다. 활동을 복사하면 세그먼트가 자동으로 추가됩니다."
             : "조건에 맞는 세그먼트가 없습니다."}
@@ -156,7 +156,7 @@ function SegmentCard({ segment }: { segment: SegmentData }) {
   return (
     <Link
       to={`/segment/${segment.id}`}
-      className="block bg-white rounded-lg border border-gray-200 p-4 hover:border-orange-300 transition-colors"
+      className="block bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:border-orange-300 transition-colors"
     >
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
@@ -170,20 +170,20 @@ function SegmentCard({ segment }: { segment: SegmentData }) {
             <span
               className={`px-2 py-0.5 text-xs rounded ${
                 isClimb
-                  ? "bg-green-100 text-green-700"
-                  : "bg-blue-100 text-blue-700"
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
               }`}
             >
               {isClimb ? "힐클라임" : "평지"}
             </span>
           </div>
           {(segment.city || segment.state) && (
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
               {[segment.city, segment.state].filter(Boolean).join(", ")}
             </p>
           )}
 
-          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span>📏 {(segment.distance / 1000).toFixed(2)}km</span>
             <span>⛰ {Math.round(elevGain)}m</span>
             <span>📐 {segment.averageGrade.toFixed(1)}%</span>

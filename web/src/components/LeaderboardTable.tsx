@@ -20,10 +20,10 @@ export default function LeaderboardTable({
   highlightUserId,
 }: LeaderboardTableProps) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
+          <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <th className="text-left px-4 py-3 font-medium w-14">순위</th>
             <th className="text-left px-4 py-3 font-medium">라이더</th>
             <th className="text-right px-4 py-3 font-medium">시간</th>
@@ -47,13 +47,13 @@ export default function LeaderboardTable({
             return (
               <tr
                 key={e.id}
-                className={`border-b border-gray-100 last:border-0 ${isHighlighted ? "bg-orange-50" : ""}`}
+                className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${isHighlighted ? "bg-orange-50 dark:bg-orange-900/20" : ""}`}
               >
                 <td className="px-4 py-3 font-medium">
                   {i < 3 ? (
                     <span className="text-lg">{RANK_BADGES[i]}</span>
                   ) : (
-                    <span className="text-gray-400">{i + 1}</span>
+                    <span className="text-gray-400 dark:text-gray-500">{i + 1}</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -78,7 +78,7 @@ export default function LeaderboardTable({
                 <td className="text-right px-4 py-3 text-blue-500 hidden sm:table-cell">
                   {e.averagePower ? `${e.averagePower}W` : "-"}
                 </td>
-                <td className="text-right px-4 py-3 text-gray-500 hidden lg:table-cell">
+                <td className="text-right px-4 py-3 text-gray-500 dark:text-gray-400 hidden lg:table-cell">
                   {new Date(e.recordedAt).toLocaleDateString("ko-KR")}
                 </td>
               </tr>
