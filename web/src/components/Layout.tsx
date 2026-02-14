@@ -426,6 +426,8 @@ export default function Layout() {
           <div className="flex items-center gap-4">
             <Link to="/feedback" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">피드백</Link>
             <Link to="/terms" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">이용약관</Link>
+            <Link to="/privacy" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">개인정보처리방침</Link>
+            <Link to="/community" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">커뮤니티 가이드라인</Link>
             <a href="mailto:orider.app@gmail.com" className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors">문의</a>
           </div>
         </div>

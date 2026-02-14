@@ -13,6 +13,9 @@ import FriendsPage from "./pages/FriendsPage";
 import MigrationPage from "./pages/MigrationPage";
 import FeedbackPage from "./pages/FeedbackPage";
 import TermsPage from "./pages/TermsPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import CommunityGuidelinesPage from "./pages/CommunityGuidelinesPage";
+import StravaTermsPage from "./pages/StravaTermsPage";
 
 export default function App() {
   return (
@@ -34,6 +37,9 @@ export default function App() {
         <Route path="/migrate" element={<MigrationPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/community" element={<CommunityGuidelinesPage />} />
+        <Route path="/strava-terms" element={<StravaTermsPage />} />
       </Route>
     </Routes>
   );
