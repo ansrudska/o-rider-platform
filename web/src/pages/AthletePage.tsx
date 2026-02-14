@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   collection, query, where, orderBy, getDocs,
   doc, getDoc, setDoc, deleteDoc,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { ref, get } from "firebase/database";
+import { useToast } from "../contexts/ToastContext";
 import { firestore, database, functions } from "../services/firebase";
 import { useDocument } from "../hooks/useFirestore";
 import { useAuth } from "../contexts/AuthContext";
@@ -25,6 +26,8 @@ function formatHours(ms: number): string {
 export default function AthletePage() {
   const { userId } = useParams<{ userId: string }>();
   const { user: currentUser, profile: currentProfile } = useAuth();
+  const { showToast } = useToast();
+  const [searchParams] = useSearchParams();
 
   const { data: firestoreProfile, loading: profileLoading } = useDocument<UserProfile>("users", userId);
 
@@ -98,6 +101,22 @@ export default function AthletePage() {
       })
       .catch(() => {});
   }, [currentUser, userId]);
+
+  // Handle auto-friend request from invite link
+  useEffect(() => {
+    if (
+      !currentUser || 
+      !userId || 
+      currentUser.uid === userId || 
+      searchParams.get("action") !== "invite" ||
+      friendStatus !== "none" ||
+      friendLoading
+    ) return;
+
+    handleSendFriendRequest().then(() => {
+        showToast("친구 요청을 자동으로 보냈습니다 👋");
+    });
+  }, [currentUser, userId, friendStatus, friendLoading, searchParams]);
 
   // Fetch friend list + count
   useEffect(() => {

@@ -15,8 +15,9 @@ function formatDuration(ms: number): string {
 }
 
 const communities = [
+  { name: "RIDING CLUB LARA", desc: "WE ARE GREATER THAN I", url: "https://cafe.naver.com/clublara", color: "pink" },
+  { name: "자출사", desc: "자전거로 출퇴근하는 사람들", url: "https://cafe.naver.com/bikecity", color: "green" },
   { name: "도싸", desc: "도로자전거싸롱", url: "https://corearoadbike.com/", color: "orange" },
-  { name: "자출사", desc: "자전거 출퇴근 커뮤니티", url: "https://cafe.naver.com/bikecity", color: "green" },
   { name: "클리앙 자전거당", desc: "클리앙 자전거 게시판", url: "https://www.clien.net/service/board/cm_bike", color: "blue" },
   { name: "바이크셀", desc: "자전거 중고거래", url: "https://bikesell.co.kr", color: "purple" },
   { name: "더바이크", desc: "자전거 전문 매거진", url: "https://thebike.co.kr", color: "red" },
@@ -28,14 +29,58 @@ const communityColors: Record<string, { bg: string; text: string }> = {
   blue: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-600" },
   purple: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-600" },
   red: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-600" },
+  pink: { bg: "bg-pink-100 dark:bg-pink-900/30", text: "text-pink-600" },
 };
 
-const communityIcons: Record<string, string> = {
-  "도싸": "🚴",
-  "자출사": "🏙️",
-  "클리앙 자전거당": "💬",
-  "바이크셀": "🔄",
-  "더바이크": "📰",
+const communityIcons: Record<string, React.ReactNode> = {
+  "도싸": (
+    <img 
+      src="https://corearoadbike.com/img/logo.gif" 
+      alt="도싸" 
+      className="w-full h-full object-contain p-1 rounded-md bg-white" 
+      referrerPolicy="no-referrer"
+    />
+  ),
+  "자출사": (
+    <img 
+      src="https://cafeptthumb-phinf.pstatic.net/20140811_139/0_1407739316239_yBqthS_jpg/%B8%F0%B9%D9%C0%CF%C4%AB%C6%E4%B8%ED2.jpg" 
+      alt="자출사" 
+      className="w-full h-full object-cover rounded-md" 
+      referrerPolicy="no-referrer"
+    />
+  ),
+  "클리앙 자전거당": (
+    <img 
+      src="https://www.clien.net/service/image/logo.png" 
+      alt="클리앙 자전거당" 
+      className="w-full h-full object-contain p-1 rounded-md bg-white border border-gray-100 dark:border-gray-700" 
+      referrerPolicy="no-referrer"
+    />
+  ),
+  "바이크셀": (
+    <img 
+      src="https://bikesell.co.kr/site/images/main_top1.gif" 
+      alt="바이크셀" 
+      className="w-full h-full object-contain p-1 rounded-md bg-white border border-gray-100 dark:border-gray-700" 
+      referrerPolicy="no-referrer"
+    />
+  ),
+  "더바이크": (
+    <img 
+      src="https://www.thebike.co.kr/img/home_logo.png" 
+      alt="더바이크" 
+      className="w-full h-full object-contain p-1 rounded-md bg-black" 
+      referrerPolicy="no-referrer"
+    />
+  ),
+  "RIDING CLUB LARA": (
+    <img 
+      src="https://cafeptthumb-phinf.pstatic.net/MjAyNTEyMDVfMjU1/MDAxNzY0OTQwMjUyMTY1.2Q6mw5UnFu97-YuUfQlZUhvWFowAmYnlmIfw0tlFad0g.x7s1AKzSkzc_QoY7MXbFkCksbVDh-_UmTvvrtJjbIh8g.PNG/externalFile.png" 
+      alt="RIDING CLUB LARA" 
+      className="w-full h-full object-cover rounded-md" 
+      referrerPolicy="no-referrer"
+    />
+  ),
 };
 
 function CommunityCard() {

@@ -443,7 +443,7 @@ export default function ActivityPage() {
               <div className="flex items-center gap-1.5 mt-2">
                 {([
                   { value: "everyone", label: "전체 공개", icon: "🌐" },
-                  { value: "friends", label: "팔로워", icon: "👥" },
+                  { value: "friends", label: "친구", icon: "👥" },
                   { value: "private", label: "비공개", icon: "🔒" },
                 ] as { value: Visibility; label: string; icon: string }[]).map((opt) => (
                   <button

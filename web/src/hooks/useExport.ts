@@ -295,7 +295,7 @@ export function useExport() {
         );
       }
 
-      setProgress({ phase: "social", current: 2, total: 4, label: "팔로잉/팔로워 로딩 중..." });
+      setProgress({ phase: "social", current: 2, total: 4, label: "팔로잉/친구 로딩 중..." });
 
       // Following & followers
       const [followingSnap, followersSnap] = await Promise.all([
