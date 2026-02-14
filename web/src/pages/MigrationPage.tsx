@@ -97,6 +97,7 @@ export default function MigrationPage() {
     }
   };
 
+  /* MOCK LOGIC REMOVED */
   const migration = profile?.migration;
   const progress = migration?.progress;
   const report = migration?.report;
@@ -384,8 +385,8 @@ export default function MigrationPage() {
           {migrationStatus === "FAILED" && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 text-center space-y-3">
               <p className="text-sm text-red-700 dark:text-red-300">
-                네트워크 문제 또는 스트라바 서버 오류일 수 있어요.
-                <br />다시 시도하면 중단된 시점부터 이어서 가져옵니다.
+                일시적인 네트워크 문제이거나 스트라바 서버 응답이 늦어지고 있어요.
+                <br />지금까지 가져온 기록은 안전합니다. <strong>이어서 가져오기</strong>를 누르면 중단된 곳부터 다시 시작해요.
               </p>
               <button
                 onClick={handleRetry}
